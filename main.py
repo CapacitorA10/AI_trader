@@ -16,43 +16,91 @@ writer = SummaryWriter()
 device = 'cuda'
 torch.cuda.is_available()
 ## data import
-'''
-stocks = ['SPY','TLT','GC=F']
+
+
 start_date = '2003-01-01'
-end_date = '2021-06-01'
+end_date = '2021-10-31'
+dateRange = pd.date_range(start=start_date, end=end_date)
 
 stock_spy = yf.download('SPY',start_date,end_date)
-stock_spy.to_csv('SPY'+'.csv',mode='w',header=True)
-
+#stock_spy.to_csv('SPY'+'.csv',mode='w',header=True)
+stock_nsdq = yf.download('NQ=F',start_date,end_date)
+#stock_nsdq.to_csv('NQ=F'+'.csv',mode='w',header=True)
 stock_tlt = yf.download('TLT',start_date,end_date)
-stock_tlt.to_csv('TLT'+'.csv',mode='w',header=True)
-
+#stock_tlt.to_csv('TLT'+'.csv',mode='w',header=True)
 stock_gold = yf.download('GC=F',start_date,end_date)
-stock_gold.to_csv('GC=F'+'.csv',mode='w',header=True)
+#stock_gold.to_csv('GC=F'+'.csv',mode='w',header=True)
+stock_oil = yf.download('CL=F',start_date,end_date)
+#stock_oil.to_csv('CL=F'+'.csv',mode='w',header=True)
 
 stock_spy["Adj Close"].plot()
 stock_tlt["Adj Close"].plot()
 stock_gold["Adj Close"].plot()
+stock_oil["Adj Close"].plot()
+stock_nsdq["Adj Close"].plot()
 plt.show()
-'''
+
 ## dataset 설정
 class stockdataset(Dataset):
-    def __init__(self, path):
-        self.data = pd.read_csv(path)
+    def __init__(self):
+        self.data_spy = stock_spy
+        self.data_tlt = stock_nsdq
+        self.data_oil = stock_tlt
+        self.data_gold = stock_gold
+        self.data_nsdq = stock_oil
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data_spy)
+
+    def data_pre_process(self):
+        def make_stationary(data):
+            for i in range(1, len(data)):
+                # 볼륨값을 제외한 나머지는 맨 뒤에서부터 앞에값의 차이로 구한다
+                temp = data.iloc[-i]  # 맨뒤
+                temp2 = data.iloc[-(i + 1)]  # 그 전날
+                newtemp = temp[0:6] - temp2[0:5]
+                newtemp['Volume'] = temp['Volume']  # 볼륨값 유지
+                data.iloc[-i] = newtemp
+
+        make_stationary(self.data_spy)
+        make_stationary(self.data_tlt)
+        make_stationary(self.data_oil)
+        make_stationary(self.data_gold)
+        make_stationary(self.data_nsdq)
 
     def __getitem__(self, i):
-        # 30일씩 가져오도록 설정
-        last_1m = torch.from_numpy(self.data.iloc[i:i+30].values[:,1:].astype(np.float)).float()
-        after_1m = torch.from_numpy(self.data.iloc[i+30].values[1:].astype(np.float)).float()
-        date = self.data.iloc[i+30].values[0]
 
-        return date, last_1m, after_1m
-spy = stockdataset('SPY.csv')
-tlt = stockdataset('TLT.csv')
-gold = stockdataset('GC=F.csv')
+        i+=1
+
+        #날짜기준은 가장 많은 spy
+        spy_idx = self.data_spy.iloc[i:i+30].index
+        spy = self.data_spy.loc[spy_idx].values[:,1:]
+
+
+        last_1m = torch.from_numpy(self.data.iloc[i:i+30].values[:,1:].astype(np.float)).float()
+        last_1m_p1 = torch.from_numpy(self.data.iloc[i-1:i + 29].values[:, 1:].astype(np.float)).float()
+        diff_1m = last_1m_p1 - last_1m
+
+        after_1m = torch.from_numpy(self.data.iloc[i+50].values[1:].astype(np.float)).float()
+        after_1m_p1 = torch.from_numpy(self.data.iloc[i + 49].values[1:].astype(np.float)).float()
+        after_diff = after_1m_p1 - after_1m
+        # 기준일+30일까지는 학습, 그보다+20일이 이제 정답(약4주후 데이터를 예측)
+        date = self.data.iloc[i+50].values[0]
+
+        return date, diff_1m, after_diff
+
+
+## data 전처리
+
+dataset = stockdataset()
+dataset.data_pre_process()
+
+stock_spy["Adj Close"].plot()
+stock_tlt["Adj Close"].plot()
+stock_gold["Adj Close"].plot()
+stock_oil["Adj Close"].plot()
+stock_nsdq["Adj Close"].plot()
+plt.show()
 
 ## MODEL 3COMBI DEFINE
 class comb_model1(torch.nn.Module):
@@ -67,6 +115,7 @@ class comb_model1(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Conv1d(64, 64, kernel_size=5, padding=2, bias=True),  # 5일치 단위
             torch.nn.BatchNorm1d(64),  # 출력shape:([B, 128, 30])
+            #torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
         )
         self.BondLayer = torch.nn.Sequential(
@@ -77,6 +126,7 @@ class comb_model1(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Conv1d(64, 64, kernel_size=5, padding=2, bias=True),  # 5일치 단위
             torch.nn.BatchNorm1d(64),  # 출력shape:([B, 128, 30])
+            #torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
         )
         self.GoldLayer = torch.nn.Sequential(
@@ -87,6 +137,7 @@ class comb_model1(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Conv1d(64, 64, kernel_size=5, padding=2, bias=True),  # 5일치 단위
             torch.nn.BatchNorm1d(64),  # 출력shape:([B, 128, 30])
+            #torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
         )
         self.CombiLayer = torch.nn.Sequential(
@@ -112,7 +163,7 @@ STOCKMODEL = comb_model1().to(device)
 optimizer = torch.optim.Adam(STOCKMODEL.parameters(), lr=0.0001)
 spy_loader = DataLoader(dataset=spy, batch_size=1, shuffle=False)
 
-max_epoch = 30
+max_epoch = 10
 k = 0
 for epoch in range(max_epoch):
     loss = 0
@@ -125,7 +176,7 @@ for epoch in range(max_epoch):
         gold_date, inp_gold, ans_gold = next(gold_loader)
         step += 1
         k += 1
-        if gold_date[0] == '2017-12-29' : #2003 - 2017년까지만 학습
+        if gold_date[0] == '2021-01-29' : #2003 - 2017년까지만 학습
             print('load done')
             break
 
@@ -151,3 +202,46 @@ for epoch in range(max_epoch):
 
     loss /= step
     print(loss)
+
+##
+
+with torch.no_grad():
+    # 예측
+    gold_start_idx = np.where(np.asarray(gold.data.Date) == '2021-05-28')[0][0]
+    bond_start_idx = np.where(np.asarray(tlt.data.Date) == '2021-05-28')[0][0]
+    snp_start_idx  = np.where(np.asarray(spy.data.Date) == '2021-05-28')[0][0]
+
+    gold_start_val = gold.data.iloc[gold_start_idx - 30: gold_start_idx].values[:, 1:].astype(np.float32)
+    gold_start_val_p1 = gold.data.iloc[gold_start_idx - 31: gold_start_idx-1].values[:, 1:].astype(np.float32)
+    inp_diff_gold = gold_start_val_p1 - gold_start_val
+
+    bond_start_val = tlt.data.iloc[bond_start_idx - 30: bond_start_idx].values[:, 1:].astype(np.float32)
+    bond_start_val_p1 = tlt.data.iloc[bond_start_idx - 31: bond_start_idx-1].values[:, 1:].astype(np.float32)
+    inp_diff_bond = bond_start_val_p1 - bond_start_val
+
+    snp_start_val = spy.data.iloc[snp_start_idx - 30: snp_start_idx].values[:, 1:].astype(np.float32)
+    snp_start_val_p1 = spy.data.iloc[snp_start_idx - 31: snp_start_idx-1].values[:, 1:].astype(np.float32)
+    inp_diff_snp = snp_start_val_p1 - snp_start_val
+
+
+    gold_start_val = torch.unsqueeze(torch.from_numpy(inp_diff_gold), 0).permute(0, 2, 1).to(device)
+    bond_start_val = torch.unsqueeze(torch.from_numpy(inp_diff_bond), 0).permute(0, 2, 1).to(device)
+    snp_start_val = torch.unsqueeze(torch.from_numpy(inp_diff_snp), 0).permute(0, 2, 1).to(device)
+
+    pred = STOCKMODEL(snp_start_val, bond_start_val, gold_start_val)
+
+    print(pred)
+
+    # 실제
+    real_gold_p = spy.data.Open[np.where(np.asarray(gold.data.Date) == '2021-05-03')[0][0]]
+    real_bond_p = tlt.data.Open[np.where(np.asarray(tlt.data.Date) == '2021-05-03')[0][0]]
+    real_snp_p = spy.data.Open[np.where(np.asarray(spy.data.Date) == '2021-05-03')[0][0]]
+
+    real_gold_f = spy.data.Open[np.where(np.asarray(gold.data.Date) == '2021-05-28')[0][0]]
+    real_bond_f = tlt.data.Open[np.where(np.asarray(tlt.data.Date) == '2021-05-28')[0][0]]
+    real_snp_f= spy.data.Open[np.where(np.asarray(spy.data.Date) == '2021-05-28')[0][0]]
+
+    real = np.asarray([real_gold_f/real_gold_p-1, real_bond_f/real_bond_p-1,real_snp_f/real_snp_p-1]) *100
+
+##
+
