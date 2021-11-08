@@ -41,6 +41,10 @@ stock_nsdq["Adj Close"].plot()
 plt.show()
 
 ## dataset 설정
+
+input_t = 30 # 입력데이터 period
+ouput_t = 10 # 출력데이터 period
+
 class stockdataset(Dataset):
     def __init__(self):
         self.data_spy = stock_spy
@@ -83,10 +87,8 @@ class stockdataset(Dataset):
         self.data_oil = self.data_oil.reindex(self.data_spy.index, method='ffill')
 
     def __getitem__(self, i):
-        input_t = 30 # 입력데이터 period
-        ouput_t = 10 # 출력데이터 period
+
         i+=1
-        
         # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
         def pullout(data,idx,period):
             return torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float)).float()
@@ -99,7 +101,7 @@ class stockdataset(Dataset):
         # 관리가 용이하도록 dictionary 형태로 모으기
         input_dic = {'spy':input_spy, 'tlt':input_tlt, 'oil':input_oil, 'gold':input_gold, 'nsdq':input_nsdq}
 
-        output_spy = pullout(self.data_spy, i+input_t, ouput_t)
+        output_spy = pullout(self.data_spy, i+input_t, ouput_t) # 출력값은 입력한 날 바로 다음날부터 가져옴!
         output_tlt = pullout(self.data_tlt, i+input_t, ouput_t)
         output_oil = pullout(self.data_oil, i+input_t, ouput_t)
         output_gold = pullout(self.data_gold, i+input_t, ouput_t)
@@ -160,19 +162,46 @@ class comb_model1(torch.nn.Module):
             #torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
         )
-        self.CombiLayer = torch.nn.Sequential(
-            torch.nn.Conv1d(192, 256, kernel_size=5, padding=2, bias=True),
-            torch.nn.BatchNorm1d(256),                                    # 출력shape:([B, 64, 30])
+        self.OilLayer = torch.nn.Sequential(
+            # input = open/high/low/close/adjusted/volume
+            torch.nn.Conv1d(6, 64, kernel_size=7, padding=3, bias=True),  # input:6개, ouput:64, 7일치 단위
+            torch.nn.BatchNorm1d(64),  # 출력shape:([B, 64, 30])
+            torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU(),
-            torch.nn.Conv1d(256, 256, kernel_size=3, padding=1, bias=True),  # 5일치 단위
-            torch.nn.BatchNorm1d(256),  # 출력shape:([B, 128, 30])
+            torch.nn.Conv1d(64, 64, kernel_size=5, padding=2, bias=True),  # 5일치 단위
+            torch.nn.BatchNorm1d(64),  # 출력shape:([B, 128, 30])
+            # torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
         )
-        self.fc = torch.nn.Linear(256*15, 3, bias=True) #open만 예측하기로...
+        self.NasdaqLayer = torch.nn.Sequential(
+            # input = open/high/low/close/adjusted/volume
+            torch.nn.Conv1d(6, 64, kernel_size=7, padding=3, bias=True),  # input:6개, ouput:64, 7일치 단위
+            torch.nn.BatchNorm1d(64),  # 출력shape:([B, 64, 30])
+            torch.nn.MaxPool1d(2, stride=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(64, 64, kernel_size=5, padding=2, bias=True),  # 5일치 단위
+            torch.nn.BatchNorm1d(64),  # 출력shape:([B, 128, 30])
+            # torch.nn.MaxPool1d(2, stride=2),
+            torch.nn.ReLU()
+        )
+        self.CombiLayer = torch.nn.Sequential(
+            torch.nn.Conv1d(320, 512, kernel_size=5, padding=2, bias=True),
+            torch.nn.BatchNorm1d(512),                                    # 출력shape:([B, 64, 30])
+            torch.nn.ReLU(),
+            torch.nn.Conv1d(512, 512, kernel_size=3, padding=1, bias=True),  # 5일치 단위
+            torch.nn.BatchNorm1d(512),  # 출력shape:([B, 128, 30])
+            torch.nn.ReLU()
+        )
+        self.fc = torch.nn.Linear(512*(input_t//2), ouput_t, bias=True) #input//2한 이유: 중간에 maxpool이 1번뿐이기 때문
 
-    def forward(self, snp, bond, gold):
-        snp = self.SnPLayer(snp); bond = self.BondLayer(bond); gold = self.GoldLayer(gold)
-        out = torch.cat((snp, bond, gold), 1)
+    def forward(self, snp, bond, gold, oil, nasdaq):
+        snp = self.SnPLayer(snp)
+        bond = self.BondLayer(bond)
+        gold = self.GoldLayer(gold)
+        oil = self.OilLayer(oil)
+        nasdaq = self.NasdaqLayer(nasdaq)
+
+        out = torch.cat((snp, bond, gold, oil, nasdaq), 1)
         out = self.CombiLayer(out)
         out = out.view(out.size(0), -1)   # Flatten them for FC
         out = self.fc(out)
