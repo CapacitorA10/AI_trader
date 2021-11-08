@@ -44,10 +44,10 @@ plt.show()
 class stockdataset(Dataset):
     def __init__(self):
         self.data_spy = stock_spy
-        self.data_tlt = stock_nsdq
-        self.data_oil = stock_tlt
+        self.data_tlt = stock_tlt
+        self.data_oil = stock_oil
         self.data_gold = stock_gold
-        self.data_nsdq = stock_oil
+        self.data_nsdq = stock_nsdq
 
     def __len__(self):
         return len(self.data_spy)
@@ -58,36 +58,56 @@ class stockdataset(Dataset):
                 # 볼륨값을 제외한 나머지는 맨 뒤에서부터 앞에값의 차이로 구한다
                 temp = data.iloc[-i]  # 맨뒤
                 temp2 = data.iloc[-(i + 1)]  # 그 전날
-                newtemp = temp[0:6] - temp2[0:5]
+                newtemp = ((temp[0:6] / temp2[0:5]) - 1)*100 # 당일/전날 하여 전날대비상승률 계산, 1을 빼서 정확한 %계산
                 newtemp['Volume'] = temp['Volume']  # 볼륨값 유지
                 data.iloc[-i] = newtemp
+            # Volume 평준화 시행
+            data['Volume'] = data['Volume'] / data['Volume'].max()
+
+
 
         make_stationary(self.data_spy)
         make_stationary(self.data_tlt)
-        make_stationary(self.data_oil)
+        #make_stationary(self.data_oil) #oil 선물은 그냥 사용? -> 2020 4월에 음전한 경력이 있어 상승,하락률 계산도 어려움
         make_stationary(self.data_gold)
         make_stationary(self.data_nsdq)
+        # oil은 Volume값 최적화만 수행
+        self.data_oil['Volume'] = self.data_oil['Volume'] / self.data_oil['Volume'].max()
+
+        # 데이터 숫자 맞추기 #
+        # reindex를 사용한다? -> 가장 많은 놈 기준으로.. 현재 spy, tlt가 최다
+        # reindex에서 gold, nsdq은 변화율 기준이니 값 0을 입력해주면 됨
+        # 하지만 oil은 절대값 기준이므로 이전값을 대입하면 됨
+        self.data_gold = self.data_gold.reindex(self.data_spy.index, fill_value=0)
+        self.data_nsdq = self.data_nsdq.reindex(self.data_spy.index, fill_value=0)
+        self.data_oil = self.data_oil.reindex(self.data_spy.index, method='ffill')
 
     def __getitem__(self, i):
-
+        input_t = 30 # 입력데이터 period
+        ouput_t = 10 # 출력데이터 period
         i+=1
+        
+        # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
+        def pullout(data,idx,period):
+            return torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float)).float()
 
-        #날짜기준은 가장 많은 spy
-        spy_idx = self.data_spy.iloc[i:i+30].index
-        spy = self.data_spy.loc[spy_idx].values[:,1:]
+        input_spy = pullout(self.data_spy, i, input_t)
+        input_tlt = pullout(self.data_tlt, i, input_t)
+        input_oil = pullout(self.data_oil, i, input_t)
+        input_gold = pullout(self.data_gold, i, input_t)
+        input_nsdq = pullout(self.data_nsdq, i, input_t)
+        # 관리가 용이하도록 dictionary 형태로 모으기
+        input_dic = {'spy':input_spy, 'tlt':input_tlt, 'oil':input_oil, 'gold':input_gold, 'nsdq':input_nsdq}
 
+        output_spy = pullout(self.data_spy, i+input_t, ouput_t)
+        output_tlt = pullout(self.data_tlt, i+input_t, ouput_t)
+        output_oil = pullout(self.data_oil, i+input_t, ouput_t)
+        output_gold = pullout(self.data_gold, i+input_t, ouput_t)
+        output_nsdq = pullout(self.data_nsdq, i+input_t, ouput_t)
+        # 관리가 용이하도록 dictionary 형태로 모으기
+        output_dic = {'spy': output_spy, 'tlt': output_tlt, 'oil': output_oil, 'gold': output_gold, 'nsdq': output_nsdq}
 
-        last_1m = torch.from_numpy(self.data.iloc[i:i+30].values[:,1:].astype(np.float)).float()
-        last_1m_p1 = torch.from_numpy(self.data.iloc[i-1:i + 29].values[:, 1:].astype(np.float)).float()
-        diff_1m = last_1m_p1 - last_1m
-
-        after_1m = torch.from_numpy(self.data.iloc[i+50].values[1:].astype(np.float)).float()
-        after_1m_p1 = torch.from_numpy(self.data.iloc[i + 49].values[1:].astype(np.float)).float()
-        after_diff = after_1m_p1 - after_1m
-        # 기준일+30일까지는 학습, 그보다+20일이 이제 정답(약4주후 데이터를 예측)
-        date = self.data.iloc[i+50].values[0]
-
-        return date, diff_1m, after_diff
+        return input_dic, output_dic
 
 
 ## data 전처리
@@ -95,11 +115,11 @@ class stockdataset(Dataset):
 dataset = stockdataset()
 dataset.data_pre_process()
 
-stock_spy["Adj Close"].plot()
-stock_tlt["Adj Close"].plot()
-stock_gold["Adj Close"].plot()
-stock_oil["Adj Close"].plot()
-stock_nsdq["Adj Close"].plot()
+dataset.data_spy["Adj Close"][1:].plot()
+dataset.data_tlt["Adj Close"][1:].plot()
+dataset.data_gold["Adj Close"][1:].plot()
+dataset.data_oil["Adj Close"][1:].plot()
+dataset.data_nsdq["Adj Close"][1:].plot()
 plt.show()
 
 ## MODEL 3COMBI DEFINE
