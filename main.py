@@ -269,18 +269,18 @@ vstock_oil["Adj Close"].plot()
 vstock_nsdq["Adj Close"].plot()
 plt.show()
 
-## dataset 설정
+## dataset 설정 및 전처리
 
 input_t = 30 # 입력데이터 period
 output_t = 10 # 출력데이터 period
 
-class stockdataset(Dataset):
+class vStockDataset(Dataset):
     def __init__(self):
-        self.data_spy = stock_spy
-        self.data_tlt = stock_tlt
-        self.data_oil = stock_oil
-        self.data_gold = stock_gold
-        self.data_nsdq = stock_nsdq
+        self.data_spy = vstock_spy
+        self.data_tlt = vstock_tlt
+        self.data_oil = vstock_oil
+        self.data_gold = vstock_gold
+        self.data_nsdq = vstock_nsdq
 
     def __len__(self):
         return len(self.data_spy)
@@ -296,8 +296,6 @@ class stockdataset(Dataset):
                 data.iloc[-i] = newtemp
             # Volume 평준화 시행
             data['Volume'] = data['Volume'] / data['Volume'].max()
-
-
 
         make_stationary(self.data_spy)
         make_stationary(self.data_tlt)
@@ -344,6 +342,16 @@ class stockdataset(Dataset):
 
         return  date, input_dic, output_dic
 
+vDataset = vStockDataset()
+vDataset.data_pre_process()
+
+vDataset.data_spy["Adj Close"][1:].plot()
+vDataset.data_tlt["Adj Close"][1:].plot()
+vDataset.data_gold["Adj Close"][1:].plot()
+vDataset.data_oil["Adj Close"][1:].plot()
+vDataset.data_nsdq["Adj Close"][1:].plot()
+plt.show()
+##
 with torch.no_grad():
     # 예측
     pred = STOCKMODEL(snp_start_val, bond_start_val, gold_start_val)
