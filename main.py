@@ -91,7 +91,9 @@ class stockdataset(Dataset):
         i+=1
         # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
         def pullout(data,idx,period):
-            return torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float)).float()
+            # permute 사용해서 색인 축(open,close등)과 day축을 교환
+            return (torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float)).float()).permute(1,0)
+
 
         input_spy = pullout(self.data_spy, i, input_t)
         input_tlt = pullout(self.data_tlt, i, input_t)
@@ -225,26 +227,28 @@ for epoch in range(max_epoch):
         if date[0] == '2017-12-29': #2003 - 2017년까지만 학습
             print('load done')
             break
-
+        # input = open/high/low/close/adjusted/volume
         # batch, feature, time step 순 정리
-        inp_spy = inp_spy.permute(0,2,1).to(device)
-        inp_tlt = inp_tlt.permute(0,2,1).to(device)
-        inp_gold = inp_gold.permute(0,2,1).to(device)
-        ans_spy = ans_spy[0, 0].to(device)
-        ans_tlt = ans_tlt[0, 0].to(device)
-        ans_gold = ans_gold[0, 0].to(device)
+        inp_spy = inVal['spy'].to(device)
+        inp_tlt = inVal['tlt'].to(device)
+        inp_gold = inVal['gold'].to(device)
+        inp_oil = inVal['oil'].to(device)
+        inp_nsdq = inVal['nsdq'].to(device)
+
+        # open 만 예상
+        ans_spy = outVal['spy'][0][0].to(device)
 
         # LEARNING START
         optimizer.zero_grad()
-        pred = STOCKMODEL(inp_spy, inp_tlt, inp_gold)#.sum()
-        cost = F.l1_loss(pred, torch.Tensor([[ans_spy, ans_tlt, ans_gold]]).to(device), reduction="none").to(device)
-        cost = cost.sum()
-        cost.backward()
+        pred = STOCKMODEL(inp_spy, inp_tlt, inp_gold, inp_oil, inp_nsdq).squeeze()
+        cost = F.l1_loss(pred, ans_spy, reduction="none").to(device)
+        #cost = cost.sum()
+        cost.backward(cost)
         optimizer.step()
 
         # LOSS Calc
-        loss += abs(cost)
-        writer.add_scalar("Loss/train", abs(cost), k)
+        loss += abs(cost).sum()
+        writer.add_scalar("Loss/train", abs(cost).sum(), k)
 
     loss /= step
     print(loss)
@@ -253,41 +257,8 @@ for epoch in range(max_epoch):
 
 with torch.no_grad():
     # 예측
-    gold_start_idx = np.where(np.asarray(gold.data.Date) == '2021-05-28')[0][0]
-    bond_start_idx = np.where(np.asarray(tlt.data.Date) == '2021-05-28')[0][0]
-    snp_start_idx  = np.where(np.asarray(spy.data.Date) == '2021-05-28')[0][0]
-
-    gold_start_val = gold.data.iloc[gold_start_idx - 30: gold_start_idx].values[:, 1:].astype(np.float32)
-    gold_start_val_p1 = gold.data.iloc[gold_start_idx - 31: gold_start_idx-1].values[:, 1:].astype(np.float32)
-    inp_diff_gold = gold_start_val_p1 - gold_start_val
-
-    bond_start_val = tlt.data.iloc[bond_start_idx - 30: bond_start_idx].values[:, 1:].astype(np.float32)
-    bond_start_val_p1 = tlt.data.iloc[bond_start_idx - 31: bond_start_idx-1].values[:, 1:].astype(np.float32)
-    inp_diff_bond = bond_start_val_p1 - bond_start_val
-
-    snp_start_val = spy.data.iloc[snp_start_idx - 30: snp_start_idx].values[:, 1:].astype(np.float32)
-    snp_start_val_p1 = spy.data.iloc[snp_start_idx - 31: snp_start_idx-1].values[:, 1:].astype(np.float32)
-    inp_diff_snp = snp_start_val_p1 - snp_start_val
-
-
-    gold_start_val = torch.unsqueeze(torch.from_numpy(inp_diff_gold), 0).permute(0, 2, 1).to(device)
-    bond_start_val = torch.unsqueeze(torch.from_numpy(inp_diff_bond), 0).permute(0, 2, 1).to(device)
-    snp_start_val = torch.unsqueeze(torch.from_numpy(inp_diff_snp), 0).permute(0, 2, 1).to(device)
-
     pred = STOCKMODEL(snp_start_val, bond_start_val, gold_start_val)
 
-    print(pred)
-
-    # 실제
-    real_gold_p = spy.data.Open[np.where(np.asarray(gold.data.Date) == '2021-05-03')[0][0]]
-    real_bond_p = tlt.data.Open[np.where(np.asarray(tlt.data.Date) == '2021-05-03')[0][0]]
-    real_snp_p = spy.data.Open[np.where(np.asarray(spy.data.Date) == '2021-05-03')[0][0]]
-
-    real_gold_f = spy.data.Open[np.where(np.asarray(gold.data.Date) == '2021-05-28')[0][0]]
-    real_bond_f = tlt.data.Open[np.where(np.asarray(tlt.data.Date) == '2021-05-28')[0][0]]
-    real_snp_f= spy.data.Open[np.where(np.asarray(spy.data.Date) == '2021-05-28')[0][0]]
-
-    real = np.asarray([real_gold_f/real_gold_p-1, real_bond_f/real_bond_p-1,real_snp_f/real_snp_p-1]) *100
 
 ##
 
