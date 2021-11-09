@@ -92,7 +92,7 @@ class stockdataset(Dataset):
         # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
         def pullout(data,idx,period):
             # permute 사용해서 색인 축(open,close등)과 day축을 교환
-            return (torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float)).float()).permute(1,0)
+            return (torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float64)).float()).permute(1,0)
 
 
         input_spy = pullout(self.data_spy, i, input_t)
