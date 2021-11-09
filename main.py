@@ -43,7 +43,7 @@ plt.show()
 ## dataset 설정
 
 input_t = 30 # 입력데이터 period
-ouput_t = 10 # 출력데이터 period
+output_t = 10 # 출력데이터 period
 
 class stockdataset(Dataset):
     def __init__(self):
@@ -101,15 +101,17 @@ class stockdataset(Dataset):
         # 관리가 용이하도록 dictionary 형태로 모으기
         input_dic = {'spy':input_spy, 'tlt':input_tlt, 'oil':input_oil, 'gold':input_gold, 'nsdq':input_nsdq}
 
-        output_spy = pullout(self.data_spy, i+input_t, ouput_t) # 출력값은 입력한 날 바로 다음날부터 가져옴!
-        output_tlt = pullout(self.data_tlt, i+input_t, ouput_t)
-        output_oil = pullout(self.data_oil, i+input_t, ouput_t)
-        output_gold = pullout(self.data_gold, i+input_t, ouput_t)
-        output_nsdq = pullout(self.data_nsdq, i+input_t, ouput_t)
+        output_spy = pullout(self.data_spy, i+input_t, output_t) # 출력값은 입력한 날 바로 다음날부터 가져옴!
+        output_tlt = pullout(self.data_tlt, i+input_t, output_t)
+        output_oil = pullout(self.data_oil, i+input_t, output_t)
+        output_gold = pullout(self.data_gold, i+input_t, output_t)
+        output_nsdq = pullout(self.data_nsdq, i+input_t, output_t)
         # 관리가 용이하도록 dictionary 형태로 모으기
         output_dic = {'spy': output_spy, 'tlt': output_tlt, 'oil': output_oil, 'gold': output_gold, 'nsdq': output_nsdq}
 
-        return input_dic, output_dic
+        date = self.data_spy.index[i+output_t].strftime('%Y-%m-%d')
+
+        return  date, input_dic, output_dic
 
 
 ## data 전처리
@@ -185,14 +187,14 @@ class comb_model1(torch.nn.Module):
             torch.nn.ReLU()
         )
         self.CombiLayer = torch.nn.Sequential(
-            torch.nn.Conv1d(320, 512, kernel_size=5, padding=2, bias=True),
-            torch.nn.BatchNorm1d(512),                                    # 출력shape:([B, 64, 30])
+            torch.nn.Conv1d(320, 384, kernel_size=5, padding=2, bias=True),
+            torch.nn.BatchNorm1d(384),                                    # 출력shape:([B, 64, 30])
             torch.nn.ReLU(),
-            torch.nn.Conv1d(512, 512, kernel_size=3, padding=1, bias=True),  # 5일치 단위
-            torch.nn.BatchNorm1d(512),  # 출력shape:([B, 128, 30])
+            torch.nn.Conv1d(384, 384, kernel_size=3, padding=1, bias=True),  # 5일치 단위
+            torch.nn.BatchNorm1d(384),  # 출력shape:([B, 128, 30])
             torch.nn.ReLU()
         )
-        self.fc = torch.nn.Linear(512*(input_t//2), ouput_t, bias=True) #input//2한 이유: 중간에 maxpool이 1번뿐이기 때문
+        self.fc = torch.nn.Linear(384*(input_t//2), output_t, bias=True) #input//2한 이유: 중간에 maxpool이 1번뿐이기 때문
 
     def forward(self, snp, bond, gold, oil, nasdaq):
         snp = self.SnPLayer(snp)
@@ -210,22 +212,17 @@ class comb_model1(torch.nn.Module):
 ## for 3dim train
 STOCKMODEL = comb_model1().to(device)
 optimizer = torch.optim.Adam(STOCKMODEL.parameters(), lr=0.0001)
-spy_loader = DataLoader(dataset=spy, batch_size=1, shuffle=False)
+loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
 
 max_epoch = 10
 k = 0
 for epoch in range(max_epoch):
     loss = 0
     step = 0
-    tlt_loader = iter(DataLoader(dataset=tlt, batch_size=1, shuffle=False))
-    gold_loader = iter(DataLoader(dataset=gold, batch_size=1, shuffle=False))
-    for date, inp_spy, ans_spy in spy_loader:
-        # data load
-        _, inp_tlt, ans_tlt = next(tlt_loader)
-        gold_date, inp_gold, ans_gold = next(gold_loader)
+    for date, inVal, outVal in loader:
         step += 1
         k += 1
-        if gold_date[0] == '2021-01-29' : #2003 - 2017년까지만 학습
+        if date[0] == '2017-12-29': #2003 - 2017년까지만 학습
             print('load done')
             break
 
