@@ -19,19 +19,14 @@ torch.cuda.is_available()
 
 
 start_date = '2003-01-01'
-end_date = '2021-10-31'
+end_date = '2021-11-09'
 dateRange = pd.date_range(start=start_date, end=end_date)
 
 stock_spy = yf.download('SPY',start_date,end_date)
-#stock_spy.to_csv('SPY'+'.csv',mode='w',header=True)
 stock_nsdq = yf.download('NQ=F',start_date,end_date)
-#stock_nsdq.to_csv('NQ=F'+'.csv',mode='w',header=True)
 stock_tlt = yf.download('TLT',start_date,end_date)
-#stock_tlt.to_csv('TLT'+'.csv',mode='w',header=True)
 stock_gold = yf.download('GC=F',start_date,end_date)
-#stock_gold.to_csv('GC=F'+'.csv',mode='w',header=True)
 stock_oil = yf.download('CL=F',start_date,end_date)
-#stock_oil.to_csv('CL=F'+'.csv',mode='w',header=True)
 
 stock_spy["Adj Close"].plot()
 stock_tlt["Adj Close"].plot()
@@ -224,7 +219,7 @@ for epoch in range(max_epoch):
     for date, inVal, outVal in loader:
         step += 1
         k += 1
-        if date[0] == '2017-12-29': #2003 - 2017년까지만 학습
+        if date[0] == '2019-07-31': #2003 - 2019년 여름까지만 학습
             print('load done')
             break
         # input = open/high/low/close/adjusted/volume
@@ -252,8 +247,102 @@ for epoch in range(max_epoch):
 
     loss /= step
     print(loss)
+#######################################################################################################################
+################################################## 여기서부터 검증 ######################################################
+## data import
 
-##
+
+start_date = '2019-08-01'
+end_date = '2021-11-09'
+dateRange = pd.date_range(start=start_date, end=end_date)
+
+vstock_spy = yf.download('SPY',start_date,end_date)
+vstock_nsdq = yf.download('NQ=F',start_date,end_date)
+vstock_tlt = yf.download('TLT',start_date,end_date)
+vstock_gold = yf.download('GC=F',start_date,end_date)
+vstock_oil = yf.download('CL=F',start_date,end_date)
+
+vstock_spy["Adj Close"].plot()
+vstock_tlt["Adj Close"].plot()
+vstock_gold["Adj Close"].plot()
+vstock_oil["Adj Close"].plot()
+vstock_nsdq["Adj Close"].plot()
+plt.show()
+
+## dataset 설정
+
+input_t = 30 # 입력데이터 period
+output_t = 10 # 출력데이터 period
+
+class stockdataset(Dataset):
+    def __init__(self):
+        self.data_spy = stock_spy
+        self.data_tlt = stock_tlt
+        self.data_oil = stock_oil
+        self.data_gold = stock_gold
+        self.data_nsdq = stock_nsdq
+
+    def __len__(self):
+        return len(self.data_spy)
+
+    def data_pre_process(self):
+        def make_stationary(data):
+            for i in range(1, len(data)):
+                # 볼륨값을 제외한 나머지는 맨 뒤에서부터 앞에값의 차이로 구한다
+                temp = data.iloc[-i]  # 맨뒤
+                temp2 = data.iloc[-(i + 1)]  # 그 전날
+                newtemp = ((temp[0:6] / temp2[0:5]) - 1)*100 # 당일/전날 하여 전날대비상승률 계산, 1을 빼서 정확한 %계산
+                newtemp['Volume'] = temp['Volume']  # 볼륨값 유지
+                data.iloc[-i] = newtemp
+            # Volume 평준화 시행
+            data['Volume'] = data['Volume'] / data['Volume'].max()
+
+
+
+        make_stationary(self.data_spy)
+        make_stationary(self.data_tlt)
+        #make_stationary(self.data_oil) #oil 선물은 그냥 사용? -> 2020 4월에 음전한 경력이 있어 상승,하락률 계산도 어려움
+        make_stationary(self.data_gold)
+        make_stationary(self.data_nsdq)
+        # oil은 Volume값 최적화만 수행
+        self.data_oil['Volume'] = self.data_oil['Volume'] / self.data_oil['Volume'].max()
+
+        # 데이터 숫자 맞추기 #
+        # reindex를 사용한다? -> 가장 많은 놈 기준으로.. 현재 spy, tlt가 최다
+        # reindex에서 gold, nsdq은 변화율 기준이니 값 0을 입력해주면 됨
+        # 하지만 oil은 절대값 기준이므로 이전값을 대입하면 됨
+        self.data_gold = self.data_gold.reindex(self.data_spy.index, fill_value=0)
+        self.data_nsdq = self.data_nsdq.reindex(self.data_spy.index, fill_value=0)
+        self.data_oil = self.data_oil.reindex(self.data_spy.index, method='ffill')
+
+    def __getitem__(self, i):
+
+        i+=1
+        # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
+        def pullout(data,idx,period):
+            # permute 사용해서 색인 축(open,close등)과 day축을 교환
+            return (torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float64)).float()).permute(1,0)
+
+
+        input_spy = pullout(self.data_spy, i, input_t)
+        input_tlt = pullout(self.data_tlt, i, input_t)
+        input_oil = pullout(self.data_oil, i, input_t)
+        input_gold = pullout(self.data_gold, i, input_t)
+        input_nsdq = pullout(self.data_nsdq, i, input_t)
+        # 관리가 용이하도록 dictionary 형태로 모으기
+        input_dic = {'spy':input_spy, 'tlt':input_tlt, 'oil':input_oil, 'gold':input_gold, 'nsdq':input_nsdq}
+
+        output_spy = pullout(self.data_spy, i+input_t, output_t) # 출력값은 입력한 날 바로 다음날부터 가져옴!
+        output_tlt = pullout(self.data_tlt, i+input_t, output_t)
+        output_oil = pullout(self.data_oil, i+input_t, output_t)
+        output_gold = pullout(self.data_gold, i+input_t, output_t)
+        output_nsdq = pullout(self.data_nsdq, i+input_t, output_t)
+        # 관리가 용이하도록 dictionary 형태로 모으기
+        output_dic = {'spy': output_spy, 'tlt': output_tlt, 'oil': output_oil, 'gold': output_gold, 'nsdq': output_nsdq}
+
+        date = self.data_spy.index[i+output_t].strftime('%Y-%m-%d')
+
+        return  date, input_dic, output_dic
 
 with torch.no_grad():
     # 예측
