@@ -1,5 +1,5 @@
 # AI_trader
-AI TRADER for NASDAQ
+AI TRADER for S&P500 & GOLD & 10year-
 
 
 
