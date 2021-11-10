@@ -16,8 +16,6 @@ writer = SummaryWriter()
 device = 'cuda'
 torch.cuda.is_available()
 ## data import
-
-
 start_date = '2003-01-01'
 end_date = '2021-11-09'
 dateRange = pd.date_range(start=start_date, end=end_date)
@@ -36,7 +34,6 @@ stock_nsdq["Adj Close"].plot()
 plt.show()
 
 ## dataset 설정
-
 input_t = 30 # 입력데이터 period
 output_t = 10 # 출력데이터 period
 
@@ -89,7 +86,6 @@ class stockdataset(Dataset):
             # permute 사용해서 색인 축(open,close등)과 day축을 교환
             return (torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float64)).float()).permute(1,0)
 
-
         input_spy = pullout(self.data_spy, i, input_t)
         input_tlt = pullout(self.data_tlt, i, input_t)
         input_oil = pullout(self.data_oil, i, input_t)
@@ -106,13 +102,11 @@ class stockdataset(Dataset):
         # 관리가 용이하도록 dictionary 형태로 모으기
         output_dic = {'spy': output_spy, 'tlt': output_tlt, 'oil': output_oil, 'gold': output_gold, 'nsdq': output_nsdq}
 
-        date = self.data_spy.index[i+output_t].strftime('%Y-%m-%d')
+        date = self.data_spy.index[i+input_t+output_t-1].strftime('%Y-%m-%d')
 
         return  date, input_dic, output_dic
 
-
-## data 전처리
-
+## data 전처리 및 show
 dataset = stockdataset()
 dataset.data_pre_process()
 
@@ -206,12 +200,13 @@ class comb_model1(torch.nn.Module):
         out = self.fc(out)
         return out
 
-## for 3dim train
+## train
 STOCKMODEL = comb_model1().to(device)
+STOCKMODEL.train()
 optimizer = torch.optim.Adam(STOCKMODEL.parameters(), lr=0.0001)
 loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
 
-max_epoch = 10
+max_epoch = 7
 k = 0
 for epoch in range(max_epoch):
     loss = 0
@@ -321,7 +316,6 @@ class vStockDataset(Dataset):
             # permute 사용해서 색인 축(open,close등)과 day축을 교환
             return (torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float64)).float()).permute(1,0)
 
-
         input_spy = pullout(self.data_spy, i, input_t)
         input_tlt = pullout(self.data_tlt, i, input_t)
         input_oil = pullout(self.data_oil, i, input_t)
@@ -338,7 +332,7 @@ class vStockDataset(Dataset):
         # 관리가 용이하도록 dictionary 형태로 모으기
         output_dic = {'spy': output_spy, 'tlt': output_tlt, 'oil': output_oil, 'gold': output_gold, 'nsdq': output_nsdq}
 
-        date = self.data_spy.index[i+output_t].strftime('%Y-%m-%d')
+        date = self.data_spy.index[i+input_t+output_t-1].strftime('%Y-%m-%d')
 
         return  date, input_dic, output_dic
 
@@ -351,11 +345,44 @@ vDataset.data_gold["Adj Close"][1:].plot()
 vDataset.data_oil["Adj Close"][1:].plot()
 vDataset.data_nsdq["Adj Close"][1:].plot()
 plt.show()
-##
-with torch.no_grad():
-    # 예측
-    pred = STOCKMODEL(snp_start_val, bond_start_val, gold_start_val)
+## 검증용
 
+vLoader = DataLoader(dataset=vDataset, batch_size=1, shuffle=False)
+STOCKMODEL.eval()
+
+with torch.no_grad():
+    max_epoch = 7
+    k = 0
+    for epoch in range(max_epoch):
+        loss = 0
+        step = 0
+        for vdate, vInVal, vOutVal in vLoader:
+            step += 1
+            k += 1
+            if vdate[0] == '2021-11-05':
+                print('load done')
+                break
+            # input = open/high/low/close/adjusted/volume
+            # batch, feature, time step 순 정리
+            vInp_spy = vInVal['spy'].to(device)
+            vInp_tlt = vInVal['tlt'].to(device)
+            vInp_gold = vInVal['gold'].to(device)
+            vInp_oil = vInVal['oil'].to(device)
+            vInp_nsdq = vInVal['nsdq'].to(device)
+
+            # open 만 예상
+            ans_spy = vOutVal['spy'][0][0].to(device)
+
+            # LEARNING START
+            vPred = STOCKMODEL(vInp_spy, vInp_tlt, vInp_gold, vInp_oil, vInp_nsdq).squeeze()
+            vCost = F.l1_loss(vPred, ans_spy, reduction="none").to(device)
+
+            # LOSS Calc
+            loss += abs(cost).sum()
+            writer.add_scalar("Verify_Loss/train", abs(cost).sum(), k)
+
+        loss /= step
+        print(loss)
 
 ##
 
