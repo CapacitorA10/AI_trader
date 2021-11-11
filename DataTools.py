@@ -17,6 +17,14 @@ def data_import(start_date='2003-01-01', end_date='2030-12-31'):
 
     return {'spy':stock_spy, 'nsdq':stock_nsdq, 'tlt':stock_tlt, 'gold':stock_gold, 'oil':stock_oil}
 
+def split(data, start_date, end_date):
+
+    output={}
+    for i in data:
+        output[i] = data[i].loc[start_date:end_date]
+
+    return output
+
 def to_percentage(data):
     for i in range(1, len(data)):
         # 볼륨값을 제외한 나머지는 맨 뒤에서부터 앞에값의 차이로 구한다
@@ -42,5 +50,16 @@ def to_percentage_period(data, period):
         data.iloc[-i] = newtemp
     data['Volume'] = data['Volume'] / data['Volume'].max()
     return data.iloc[period+1:]
-##
+
+def data_pre_process_(data):
+    print('Pre processing...')
+    data['spy'] = to_percentage(data['spy'])
+    data['tlt'] = to_percentage(data['tlt'])
+    data['gold'] = to_percentage(data['gold'])
+    data['nsdq'] = to_percentage(data['nsdq'])
+    data['oil']['Volume'] = data['oil']['Volume'] / data['oil']['Volume'].max()
+    print('Done')
+
+
+
 
