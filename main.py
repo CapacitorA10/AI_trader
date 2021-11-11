@@ -13,7 +13,9 @@ device = 'cuda'
 torch.cuda.is_available()
 ## data import
 stocks = DTs.data_import('2003-01-01', '2021-11-09')
-
+DTs.data_pre_process_(stocks)
+stock_train = DTs.split(stocks, '2003-01-01', '2020-01-01')
+stock_test = DTs.split(stocks, '2020-01-01', '2025-01-01')
 ## dataset 설정
 input_t = 30 # 입력데이터 period
 output_t = 10 # 출력데이터 period
@@ -29,17 +31,8 @@ class stockdataset(Dataset):
     def __len__(self):
         return len(self.data_spy)
 
-    def data_pre_process(self):
-        self.data_spy = DTs.to_percentage(self.data_spy)
-        self.data_tlt = DTs.to_percentage(self.data_tlt)
-        self.data_gold = DTs.to_percentage(self.data_gold)
-        self.data_nsdq = DTs.to_percentage(self.data_nsdq)
-        # oil은 Volume값 최적화만 수행
-        self.data_oil['Volume'] = self.data_oil['Volume'] / self.data_oil['Volume'].max()
-
     def __getitem__(self, i):
 
-        i+=1
         # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
         def pullout(data,idx,period):
             # permute 사용해서 색인 축(open,close등)과 day축을 교환
@@ -50,7 +43,6 @@ class stockdataset(Dataset):
         input_oil = pullout(self.data_oil, i, input_t)
         input_gold = pullout(self.data_gold, i, input_t)
         input_nsdq = pullout(self.data_nsdq, i, input_t)
-        # 관리가 용이하도록 dictionary 형태로 모으기
         input_dic = {'spy':input_spy, 'tlt':input_tlt, 'oil':input_oil, 'gold':input_gold, 'nsdq':input_nsdq}
 
         output_spy = pullout(self.data_spy, i+input_t, output_t) # 출력값은 입력한 날 바로 다음날부터 가져옴!
@@ -58,7 +50,6 @@ class stockdataset(Dataset):
         output_oil = pullout(self.data_oil, i+input_t, output_t)
         output_gold = pullout(self.data_gold, i+input_t, output_t)
         output_nsdq = pullout(self.data_nsdq, i+input_t, output_t)
-        # 관리가 용이하도록 dictionary 형태로 모으기
         output_dic = {'spy': output_spy, 'tlt': output_tlt, 'oil': output_oil, 'gold': output_gold, 'nsdq': output_nsdq}
 
         date = self.data_spy.index[i+input_t+output_t-1].strftime('%Y-%m-%d')
@@ -66,17 +57,13 @@ class stockdataset(Dataset):
         return  date, input_dic, output_dic
 
 ## data 전처리 및 show
-dataset = stockdataset(stocks)
-dataset.data_pre_process()
+trainData = stockdataset(stock_train)
+testData = stockdataset(stock_test)
 '''
-dataset.data_spy["Adj Close"].plot()
-dataset.data_tlt["Adj Close"][1:].plot()
-dataset.data_gold["Adj Close"][1:].plot()
-dataset.data_oil["Adj Close"][1:].plot()
-dataset.data_nsdq["Adj Close"][1:].plot()
+trainData.data_spy.plot()
+testData.data_spy.plot()
 plt.show()
-'''
- # 데이터 plot
+''' # 데이터 plot
 
 
 ## MODEL 3COMBI DEFINE
@@ -166,7 +153,7 @@ class comb_model1(torch.nn.Module):
 STOCKMODEL = comb_model1().to(device)
 STOCKMODEL.train()
 optimizer = torch.optim.Adam(STOCKMODEL.parameters(), lr=0.0001)
-loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
+loader = DataLoader(dataset=trainData, batch_size=1, shuffle=False)
 
 max_epoch = 7
 k = 0
@@ -201,6 +188,8 @@ for epoch in range(max_epoch):
         # LOSS Calc
         loss += abs(cost).sum()
         writer.add_scalar("Loss/train", abs(cost).sum(), k)
+
+
 
     loss /= step
     print(loss)
