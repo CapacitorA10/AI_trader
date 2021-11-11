@@ -153,46 +153,57 @@ class comb_model1(torch.nn.Module):
 STOCKMODEL = comb_model1().to(device)
 STOCKMODEL.train()
 optimizer = torch.optim.Adam(STOCKMODEL.parameters(), lr=0.0001)
-loader = DataLoader(dataset=trainData, batch_size=1, shuffle=False)
-
-max_epoch = 7
-k = 0
+testLoader = DataLoader(dataset=trainData, batch_size=1, shuffle=False)
+trainLoader = DataLoader(dataset=testData, batch_size=1, shuffle=False)
+max_epoch = 15
+tb_step = 0
+tb_step2 = 0
 for epoch in range(max_epoch):
     loss = 0
     step = 0
-    for date, inVal, outVal in loader:
+    for date, inVal, outVal in testLoader:
         step += 1
-        k += 1
+        tb_step += 1
         if date[0] == '2019-07-31': #2003 - 2019년 여름까지만 학습
             print('load done')
             break
-        # input = open/high/low/close/adjusted/volume
-        # batch, feature, time step 순 정리
-        inp_spy = inVal['spy'].to(device)
-        inp_tlt = inVal['tlt'].to(device)
-        inp_gold = inVal['gold'].to(device)
-        inp_oil = inVal['oil'].to(device)
-        inp_nsdq = inVal['nsdq'].to(device)
-
-        # open 만 예상
-        ans_spy = outVal['spy'][0][0].to(device)
 
         # LEARNING START
         optimizer.zero_grad()
-        pred = STOCKMODEL(inp_spy, inp_tlt, inp_gold, inp_oil, inp_nsdq).squeeze()
+        pred = STOCKMODEL(inVal['spy'].to(device),
+                          inVal['tlt'].to(device),
+                          inVal['gold'].to(device),
+                          inVal['oil'].to(device),
+                          inVal['nsdq'].to(device)).squeeze()
+        # open/high/low/close/adjusted/volume
+        ans_spy = outVal['spy'][0][0].to(device)
         cost = F.l1_loss(pred, ans_spy, reduction="none").to(device)
-        #cost = cost.sum()
         cost.backward(cost)
         optimizer.step()
-
         # LOSS Calc
         loss += abs(cost).sum()
-        writer.add_scalar("Loss/train", abs(cost).sum(), k)
+        writer.add_scalar("Loss/train", abs(cost).sum(), tb_step)
 
+        # verification
 
+        if step % 300 == 1:
+            with torch.no_grad():
+                for vDate, vInVal, vOutVal in trainLoader:
+                    if vDate[0] == '2021-11-05':  # 2003 - 2019년 여름까지만 학습
+                        print('verification done')
+                        break
+                    vPred = STOCKMODEL(vInVal['spy'].to(device),
+                                       vInVal['tlt'].to(device),
+                                       vInVal['gold'].to(device),
+                                       vInVal['oil'].to(device),
+                                       vInVal['nsdq'].to(device)).squeeze()
+                    vAns_spy = vOutVal['spy'][0][0].to(device)
+                    vCost = F.l1_loss(vPred, vAns_spy, reduction="none").to(device)
+                    writer.add_scalar("Loss/Test", abs(vCost).sum(), tb_step2)
+                    tb_step2 += 1
 
     loss /= step
-    print(loss)
+    print(f"epoch{epoch} mean loss: {loss}")
 #######################################################################################################################
 ################################################## 여기서부터 검증 ######################################################
 ## data import
