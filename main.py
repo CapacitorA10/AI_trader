@@ -9,13 +9,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from torch.utils.tensorboard import SummaryWriter
 writer = SummaryWriter()
-
 device = 'cuda'
 torch.cuda.is_available()
 ## data import
-start_date = '2003-01-01'
-end_date = '2021-11-09'
-stocks = DTs.data_import(start_date, end_date)
+stocks = DTs.data_import('2003-01-01', '2021-11-09')
 
 ## dataset 설정
 input_t = 30 # 입력데이터 period
@@ -33,18 +30,12 @@ class stockdataset(Dataset):
         return len(self.data_spy)
 
     def data_pre_process(self):
-        DTs.to_percentage(self.data_spy)
-        DTs.to_percentage(self.data_tlt)
-        DTs.to_percentage(self.data_gold)
-        DTs.to_percentage(self.data_nsdq)
+        self.data_spy = DTs.to_percentage(self.data_spy)
+        self.data_tlt = DTs.to_percentage(self.data_tlt)
+        self.data_gold = DTs.to_percentage(self.data_gold)
+        self.data_nsdq = DTs.to_percentage(self.data_nsdq)
         # oil은 Volume값 최적화만 수행
         self.data_oil['Volume'] = self.data_oil['Volume'] / self.data_oil['Volume'].max()
-        # 데이터 숫자 맞추기 #
-        # reindex에서 gold, nsdq은 변화율 기준이니 값 0을 입력해주면 됨
-        # 하지만 oil은 절대값 기준이므로 이전값을 대입하면 됨
-        self.data_gold = self.data_gold.reindex(self.data_spy.index, fill_value=0)
-        self.data_nsdq = self.data_nsdq.reindex(self.data_spy.index, fill_value=0)
-        self.data_oil = self.data_oil.reindex(self.data_spy.index, method='ffill')
 
     def __getitem__(self, i):
 
@@ -78,13 +69,14 @@ class stockdataset(Dataset):
 dataset = stockdataset(stocks)
 dataset.data_pre_process()
 '''
-dataset.data_spy["Adj Close"][1:].plot()
+dataset.data_spy["Adj Close"].plot()
 dataset.data_tlt["Adj Close"][1:].plot()
 dataset.data_gold["Adj Close"][1:].plot()
 dataset.data_oil["Adj Close"][1:].plot()
 dataset.data_nsdq["Adj Close"][1:].plot()
 plt.show()
-''' # 데이터 plot
+'''
+ # 데이터 plot
 
 
 ## MODEL 3COMBI DEFINE
