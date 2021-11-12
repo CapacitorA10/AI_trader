@@ -153,15 +153,15 @@ class comb_model1(torch.nn.Module):
 STOCKMODEL = comb_model1().to(device)
 STOCKMODEL.train()
 optimizer = torch.optim.Adam(STOCKMODEL.parameters(), lr=0.0001)
-testLoader = DataLoader(dataset=trainData, batch_size=1, shuffle=False)
-trainLoader = DataLoader(dataset=testData, batch_size=1, shuffle=False)
+trainLoader = DataLoader(dataset=trainData, batch_size=1, shuffle=False)
+testLoader = DataLoader(dataset=testData, batch_size=1, shuffle=False)
 max_epoch = 15
 tb_step = 0
 tb_step2 = 0
 for epoch in range(max_epoch):
     loss = 0
     step = 0
-    for date, inVal, outVal in testLoader:
+    for date, inVal, outVal in trainLoader:
         step += 1
         tb_step += 1
         if date[0] == '2019-07-31': #2003 - 2019년 여름까지만 학습
@@ -186,9 +186,9 @@ for epoch in range(max_epoch):
 
         # verification
 
-        if step % 300 == 1:
+        if step % 1000 == 1:
             with torch.no_grad():
-                for vDate, vInVal, vOutVal in trainLoader:
+                for vDate, vInVal, vOutVal in testLoader:
                     if vDate[0] == '2021-11-05':  # 2003 - 2019년 여름까지만 학습
                         print('verification done')
                         break
@@ -206,131 +206,4 @@ for epoch in range(max_epoch):
     print(f"epoch{epoch} mean loss: {loss}")
 #######################################################################################################################
 ################################################## 여기서부터 검증 ######################################################
-## data import
-
-start_date = '2019-08-01'
-end_date = '2021-11-09'
-vstock_spy, vstock_nsdq, vstock_tlt, vstock_gold, vstock_oil = DTs.data_import(start_date, end_date)
-
-## dataset 설정 및 전처리
-
-input_t = 30 # 입력데이터 period
-output_t = 10 # 출력데이터 period
-
-class vStockDataset(Dataset):
-    def __init__(self):
-        self.data_spy = vstock_spy
-        self.data_tlt = vstock_tlt
-        self.data_oil = vstock_oil
-        self.data_gold = vstock_gold
-        self.data_nsdq = vstock_nsdq
-
-    def __len__(self):
-        return len(self.data_spy)
-
-    def data_pre_process(self):
-        def make_stationary(data):
-            for i in range(1, len(data)):
-                # 볼륨값을 제외한 나머지는 맨 뒤에서부터 앞에값의 차이로 구한다
-                temp = data.iloc[-i]  # 맨뒤
-                temp2 = data.iloc[-(i + 1)]  # 그 전날
-                newtemp = ((temp[0:6] / temp2[0:5]) - 1)*100 # 당일/전날 하여 전날대비상승률 계산, 1을 빼서 정확한 %계산
-                newtemp['Volume'] = temp['Volume']  # 볼륨값 유지
-                data.iloc[-i] = newtemp
-            # Volume 평준화 시행
-            data['Volume'] = data['Volume'] / data['Volume'].max()
-
-        make_stationary(self.data_spy)
-        make_stationary(self.data_tlt)
-        #make_stationary(self.data_oil) #oil 선물은 그냥 사용? -> 2020 4월에 음전한 경력이 있어 상승,하락률 계산도 어려움
-        make_stationary(self.data_gold)
-        make_stationary(self.data_nsdq)
-        # oil은 Volume값 최적화만 수행
-        self.data_oil['Volume'] = self.data_oil['Volume'] / self.data_oil['Volume'].max()
-
-        # 데이터 숫자 맞추기 #
-        # reindex를 사용한다? -> 가장 많은 놈 기준으로.. 현재 spy, tlt가 최다
-        # reindex에서 gold, nsdq은 변화율 기준이니 값 0을 입력해주면 됨
-        # 하지만 oil은 절대값 기준이므로 이전값을 대입하면 됨
-        self.data_gold = self.data_gold.reindex(self.data_spy.index, fill_value=0)
-        self.data_nsdq = self.data_nsdq.reindex(self.data_spy.index, fill_value=0)
-        self.data_oil = self.data_oil.reindex(self.data_spy.index, method='ffill')
-
-    def __getitem__(self, i):
-
-        i+=1
-        # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
-        def pullout(data,idx,period):
-            # permute 사용해서 색인 축(open,close등)과 day축을 교환
-            return (torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float64)).float()).permute(1,0)
-
-        input_spy = pullout(self.data_spy, i, input_t)
-        input_tlt = pullout(self.data_tlt, i, input_t)
-        input_oil = pullout(self.data_oil, i, input_t)
-        input_gold = pullout(self.data_gold, i, input_t)
-        input_nsdq = pullout(self.data_nsdq, i, input_t)
-        # 관리가 용이하도록 dictionary 형태로 모으기
-        input_dic = {'spy':input_spy, 'tlt':input_tlt, 'oil':input_oil, 'gold':input_gold, 'nsdq':input_nsdq}
-
-        output_spy = pullout(self.data_spy, i+input_t, output_t) # 출력값은 입력한 날 바로 다음날부터 가져옴!
-        output_tlt = pullout(self.data_tlt, i+input_t, output_t)
-        output_oil = pullout(self.data_oil, i+input_t, output_t)
-        output_gold = pullout(self.data_gold, i+input_t, output_t)
-        output_nsdq = pullout(self.data_nsdq, i+input_t, output_t)
-        # 관리가 용이하도록 dictionary 형태로 모으기
-        output_dic = {'spy': output_spy, 'tlt': output_tlt, 'oil': output_oil, 'gold': output_gold, 'nsdq': output_nsdq}
-
-        date = self.data_spy.index[i+input_t+output_t-1].strftime('%Y-%m-%d')
-
-        return  date, input_dic, output_dic
-
-vDataset = vStockDataset()
-vDataset.data_pre_process()
-
-vDataset.data_spy["Adj Close"][1:].plot()
-vDataset.data_tlt["Adj Close"][1:].plot()
-vDataset.data_gold["Adj Close"][1:].plot()
-vDataset.data_oil["Adj Close"][1:].plot()
-vDataset.data_nsdq["Adj Close"][1:].plot()
-plt.show()
-## 검증용
-
-vLoader = DataLoader(dataset=vDataset, batch_size=1, shuffle=False)
-STOCKMODEL.eval()
-
-with torch.no_grad():
-    max_epoch = 7
-    k = 0
-    for epoch in range(max_epoch):
-        loss = 0
-        step = 0
-        for vdate, vInVal, vOutVal in vLoader:
-            step += 1
-            k += 1
-            if vdate[0] == '2021-11-05':
-                print('load done')
-                break
-            # input = open/high/low/close/adjusted/volume
-            # batch, feature, time step 순 정리
-            vInp_spy = vInVal['spy'].to(device)
-            vInp_tlt = vInVal['tlt'].to(device)
-            vInp_gold = vInVal['gold'].to(device)
-            vInp_oil = vInVal['oil'].to(device)
-            vInp_nsdq = vInVal['nsdq'].to(device)
-
-            # open 만 예상
-            ans_spy = vOutVal['spy'][0][0].to(device)
-
-            # LEARNING START
-            vPred = STOCKMODEL(vInp_spy, vInp_tlt, vInp_gold, vInp_oil, vInp_nsdq).squeeze()
-            vCost = F.l1_loss(vPred, ans_spy, reduction="none").to(device)
-
-            # LOSS Calc
-            loss += abs(cost).sum()
-            writer.add_scalar("Verify_Loss/train", abs(cost).sum(), k)
-
-        loss /= step
-        print(loss)
-
-##
 
