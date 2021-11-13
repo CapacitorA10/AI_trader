@@ -207,7 +207,7 @@ for epoch in range(max_epoch):
                 print(f"verification done, Last date = {vDate}")
 
     loss /= step
-    print(f"Learning done, Last date = {vDate}")
+    print(f"Learning done, Last date = {date}")
     print(f"epoch{epoch} mean loss: {loss}")
 
 #######################################################################################################################
