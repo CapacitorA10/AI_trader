@@ -12,7 +12,7 @@ writer = SummaryWriter()
 device = 'cuda'
 torch.cuda.is_available()
 ## data import
-stocks = DTs.data_import('2003-01-01', '2021-11-09')
+stocks = DTs.data_import('2003-01-01', '2025-01-01')
 DTs.data_pre_process_(stocks)
 stock_train = DTs.split(stocks, '2003-01-01', '2020-01-01')
 stock_test = DTs.split(stocks, '2020-01-01', '2025-01-01')
@@ -29,7 +29,7 @@ class stockdataset(Dataset):
         self.data_gold = stock['gold']
 
     def __len__(self):
-        return len(self.data_spy)-input_t-output_t
+        return len(self.data_spy) - input_t - output_t + 1
 
     def __getitem__(self, i):
 
@@ -183,7 +183,7 @@ for epoch in range(max_epoch):
 
         # verification
 
-        if step % 1000 == 1:
+        if step % 4000 == 1:
             with torch.no_grad():
                 for vDate, vInVal, vOutVal in testLoader:
                     vPred = STOCKMODEL(vInVal['spy'].to(device),
