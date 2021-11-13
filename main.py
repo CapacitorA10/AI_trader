@@ -17,7 +17,7 @@ DTs.data_pre_process_(stocks)
 stock_train = DTs.split(stocks, '2003-01-01', '2020-01-01')
 stock_test = DTs.split(stocks, '2020-01-01', '2025-01-01')
 ## dataset 설정
-input_t = 30 # 입력데이터 period
+input_t = 80 # 입력데이터 period 80- 50- 30으로 해보자
 output_t = 10 # 출력데이터 period
 
 class stockdataset(Dataset):
@@ -155,12 +155,13 @@ STOCKMODEL.train()
 optimizer = torch.optim.Adam(STOCKMODEL.parameters(), lr=0.0001)
 trainLoader = DataLoader(dataset=trainData, batch_size=1, shuffle=False)
 testLoader = DataLoader(dataset=testData, batch_size=1, shuffle=False)
-max_epoch = 15
+max_epoch = 10
 tb_step = 0
 tb_step2 = 0
 for epoch in range(max_epoch):
     loss = 0
     step = 0
+    date = 0
     for date, inVal, outVal in trainLoader:
         step += 1
         tb_step += 1
@@ -178,12 +179,12 @@ for epoch in range(max_epoch):
         cost.backward(cost)
         optimizer.step()
         # LOSS Calc
-        loss += abs(cost).sum()
-        writer.add_scalar("Loss/train", abs(cost).sum(), tb_step)
+        loss += cost.sum() / output_t
+        writer.add_scalar("Loss/train", cost.sum(), tb_step)
 
         # verification
-
-        if step % 4000 == 1:
+        vLoss = 0
+        if step % 2500 == 1:
             with torch.no_grad():
                 for vDate, vInVal, vOutVal in testLoader:
                     vPred = STOCKMODEL(vInVal['spy'].to(device),
@@ -193,13 +194,16 @@ for epoch in range(max_epoch):
                                        vInVal['nsdq'].to(device)).squeeze()
                     vAns_spy = vOutVal['spy'][0][0].to(device)
                     vCost = F.l1_loss(vPred, vAns_spy, reduction="none").to(device)
-                    writer.add_scalar("Loss/Test", abs(vCost).sum(), tb_step2)
+                    writer.add_scalar("Loss/Test", vCost.sum(), tb_step2)
                     tb_step2 += 1
+                    vLoss += vCost / output_t
                 print(f"verification done, Last date = {vDate}")
+                print(f"each loss: {(vLoss*output_t) / tb_step2}")
+                print(f"mean Loss: {vLoss.sum() /tb_step2}")
 
     loss /= step
-    print(f"Learning done, Last date = {date}")
-    print(f"epoch{epoch} mean loss: {loss}")
+
+    print(f"///////////epoch{epoch} mean loss: {loss}/////////////")
 
 #######################################################################################################################
 ################################################## 여기서부터 검증 ######################################################
