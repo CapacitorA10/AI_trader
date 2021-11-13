@@ -164,11 +164,7 @@ for epoch in range(max_epoch):
     for date, inVal, outVal in trainLoader:
         step += 1
         tb_step += 1
-        '''
-        if date[0] == '2019-07-31': #2003 - 2019년 여름까지만 학습
-            print('load done')
-            break
-        '''
+
         # LEARNING START
         optimizer.zero_grad()
         pred = STOCKMODEL(inVal['spy'].to(device),
@@ -190,11 +186,6 @@ for epoch in range(max_epoch):
         if step % 1000 == 1:
             with torch.no_grad():
                 for vDate, vInVal, vOutVal in testLoader:
-                    '''
-                    if vDate[0] == '2021-11-05':  # 2003 - 2019년 여름까지만 학습
-                        print('verification done')
-                        break
-                        '''
                     vPred = STOCKMODEL(vInVal['spy'].to(device),
                                        vInVal['tlt'].to(device),
                                        vInVal['gold'].to(device),
