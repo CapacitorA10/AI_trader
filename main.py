@@ -154,7 +154,7 @@ class comb_model1(torch.nn.Module):
 STOCKMODEL = comb_model1().to(device)
 STOCKMODEL.train()
 optimizer = torch.optim.Adam(STOCKMODEL.parameters(), lr=0.0001)
-trainLoader = DataLoader(dataset=trainData, batch_size=1, shuffle=False)
+trainLoader = DataLoader(dataset=trainData, batch_size=1, shuffle=True)
 testLoader = DataLoader(dataset=testData, batch_size=1, shuffle=False)
 
 # tensorboard 그리기
