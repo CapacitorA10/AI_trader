@@ -3,7 +3,7 @@ import yfinance as yf
 def data_import(start_date='2003-01-01', end_date='2030-12-31'):
     stock_spy = yf.download('^GSPC',start_date,end_date)
     stock_nsdq = yf.download('^IXIC',start_date,end_date)
-    stock_tlt = yf.download('TLT',start_date,end_date)
+    stock_tlt = yf.download('ZB=F',start_date,end_date)
     stock_gold = yf.download('GC=F',start_date,end_date)
     stock_oil = yf.download('CL=F',start_date,end_date)
     
@@ -62,4 +62,7 @@ def data_pre_process_(data):
 
 
 
+
+
+##
 
