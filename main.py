@@ -12,12 +12,12 @@ writer = SummaryWriter()
 device = 'cuda'
 torch.cuda.is_available()
 ## data import
-stocks = DTs.data_import('2003-01-01', '2025-01-01')
+stocks = DTs.data_import('2001-01-01', '2025-01-01')
 DTs.data_pre_process_(stocks)
-stock_train = DTs.split(stocks, '2003-01-01', '2020-01-01')
-stock_test = DTs.split(stocks, '2020-01-01', '2025-01-01')
+stock_train = DTs.split(stocks, '2001-01-01', '2019-06-30')
+stock_test = DTs.split(stocks, '2019-07-01', '2025-01-01')
 ## dataset 설정
-input_t = 80 # 입력데이터 period 80- 50- 30으로 해보자
+input_t = 100 # 입력데이터 period 100 - 70 - 30으로 해보자
 output_t = 10 # 출력데이터 period
 
 class stockdataset(Dataset):
@@ -59,6 +59,7 @@ class stockdataset(Dataset):
 ## data 전처리 및 show
 trainData = stockdataset(stock_train)
 testData = stockdataset(stock_test)
+
 '''
 trainData.data_spy.plot()
 testData.data_spy.plot()
@@ -128,10 +129,10 @@ class comb_model1(torch.nn.Module):
         )
         self.CombiLayer = torch.nn.Sequential(
             torch.nn.Conv1d(320, 384, kernel_size=5, padding=2, bias=True),
-            torch.nn.BatchNorm1d(384),                                    # 출력shape:([B, 64, 30])
+            torch.nn.BatchNorm1d(384),
             torch.nn.ReLU(),
-            torch.nn.Conv1d(384, 384, kernel_size=3, padding=1, bias=True),  # 5일치 단위
-            torch.nn.BatchNorm1d(384),  # 출력shape:([B, 128, 30])
+            torch.nn.Conv1d(384, 384, kernel_size=3, padding=1, bias=True),
+            torch.nn.BatchNorm1d(384),
             torch.nn.ReLU()
         )
         self.fc = torch.nn.Linear(384*(input_t//2), output_t, bias=True) #input//2한 이유: 중간에 maxpool이 1번뿐이기 때문
@@ -149,15 +150,25 @@ class comb_model1(torch.nn.Module):
         out = self.fc(out)
         return out
 
-## train
+## train ready
 STOCKMODEL = comb_model1().to(device)
 STOCKMODEL.train()
 optimizer = torch.optim.Adam(STOCKMODEL.parameters(), lr=0.0001)
 trainLoader = DataLoader(dataset=trainData, batch_size=1, shuffle=False)
 testLoader = DataLoader(dataset=testData, batch_size=1, shuffle=False)
-max_epoch = 10
+
+# tensorboard 그리기
+_, sample, _ = next(iter(trainLoader))
+writer.add_graph(STOCKMODEL,[sample['spy'].to(device)
+                            ,sample['tlt'].to(device)
+                            ,sample['gold'].to(device)
+                            ,sample['oil'].to(device)
+                            ,sample['nsdq'].to(device)])
+max_epoch = 15
 tb_step = 0
 tb_step2 = 0
+tb_avg_step2 = 0
+## train start
 for epoch in range(max_epoch):
     loss = 0
     step = 0
@@ -180,10 +191,11 @@ for epoch in range(max_epoch):
         optimizer.step()
         # LOSS Calc
         loss += cost.sum() / output_t
-        writer.add_scalar("Loss/train", cost.sum(), tb_step)
+        writer.add_scalar("Loss/train", cost.sum() / output_t, tb_step)
 
         # verification
         vLoss = 0
+        step2 = 0
         if step % 2500 == 1:
             with torch.no_grad():
                 for vDate, vInVal, vOutVal in testLoader:
@@ -194,16 +206,21 @@ for epoch in range(max_epoch):
                                        vInVal['nsdq'].to(device)).squeeze()
                     vAns_spy = vOutVal['spy'][0][0].to(device)
                     vCost = F.l1_loss(vPred, vAns_spy, reduction="none").to(device)
-                    writer.add_scalar("Loss/Test", vCost.sum(), tb_step2)
+                    writer.add_scalar("Loss/Test", vCost.sum() / output_t, tb_step2)
                     tb_step2 += 1
+                    step2 += 1
                     vLoss += vCost / output_t
                 print(f"verification done, Last date = {vDate}")
-                print(f"each loss: {(vLoss*output_t) / tb_step2}")
-                print(f"mean Loss: {vLoss.sum() /tb_step2}")
+                print(f"mean Loss: {vLoss.sum() / step2}")
+                print(f"each loss: {(vLoss*output_t) / step2}")
+                writer.add_scalar("AvgLoss/Test", vLoss.sum()/step2, tb_avg_step2)
+                tb_avg_step2 += 1
+
 
     loss /= step
 
-    print(f"///////////epoch{epoch} mean loss: {loss}/////////////")
+    print(f"/////////////epoch{epoch} mean loss: {loss}///////////////")
+
 
 #######################################################################################################################
 ################################################## 여기서부터 검증 ######################################################
