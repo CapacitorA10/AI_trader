@@ -13,12 +13,13 @@ device = 'cuda'
 torch.cuda.is_available()
 ## data import
 stocks = DTs.data_import('2001-01-01', '2025-01-01')
+periodDiff_stocks = DTs.data_pre_process_period(stocks, period=5)
 DTs.data_pre_process_(stocks)
 stock_train = DTs.split(stocks, '2001-01-01', '2019-06-30')
 stock_test = DTs.split(stocks, '2019-07-01', '2025-01-01')
 ## dataset 설정
-input_t = 100 # 입력데이터 period 100 - 70 - 30으로 해보자
-output_t = 10 # 출력데이터 period
+input_t = 6 # 입력데이터 period 100 - 70 - 30 - 15 - 6 순...
+output_t = 1 # 출력데이터 period
 
 class stockdataset(Dataset):
     def __init__(self, stock):
@@ -154,8 +155,8 @@ class comb_model1(torch.nn.Module):
 STOCKMODEL = comb_model1().to(device)
 STOCKMODEL.train()
 optimizer = torch.optim.Adam(STOCKMODEL.parameters(), lr=0.0001)
-trainLoader = DataLoader(dataset=trainData, batch_size=1, shuffle=True)
-testLoader = DataLoader(dataset=testData, batch_size=1, shuffle=False)
+trainLoader = DataLoader(dataset=trainData, batch_size=1, shuffle=True, num_workers=0)
+testLoader = DataLoader(dataset=testData, batch_size=1, shuffle=False, num_workers=0)
 
 # tensorboard 그리기
 _, sample, _ = next(iter(trainLoader))
@@ -186,7 +187,7 @@ for epoch in range(max_epoch):
                           inVal['nsdq'].to(device)).squeeze()
         # open/high/low/close/adjusted/volume
         ans_spy = outVal['spy'][0][0].to(device)
-        cost = F.l1_loss(pred, ans_spy, reduction="none").to(device)
+        cost = F.l1_loss(pred, ans_spy.squeeze(), reduction="none").to(device)
         cost.backward(cost)
         optimizer.step()
         # LOSS Calc
@@ -205,7 +206,7 @@ for epoch in range(max_epoch):
                                        vInVal['oil'].to(device),
                                        vInVal['nsdq'].to(device)).squeeze()
                     vAns_spy = vOutVal['spy'][0][0].to(device)
-                    vCost = F.l1_loss(vPred, vAns_spy, reduction="none").to(device)
+                    vCost = F.l1_loss(vPred, vAns_spy.squeeze(), reduction="none").to(device)
                     writer.add_scalar("Loss/Test", vCost.sum() / output_t, tb_step2)
                     tb_step2 += 1
                     step2 += 1
