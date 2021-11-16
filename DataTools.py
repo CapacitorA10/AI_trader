@@ -60,7 +60,16 @@ def data_pre_process_(data):
     data['oil']['Volume'] = data['oil']['Volume'] / data['oil']['Volume'].max()
     print('Done')
 
-
+def data_pre_process_period(data, period=5):
+    print('Calculating Period diff...')
+    ret = data.copy()
+    ret['spy'] = to_percentage_period(ret['spy'],period)
+    ret['tlt'] = to_percentage_period(ret['tlt'],period)
+    ret['gold'] = to_percentage_period(ret['gold'],period)
+    ret['nsdq'] = to_percentage_period(ret['nsdq'],period)
+    ret['oil']['Volume'] = ret['oil']['Volume'] / ret['oil']['Volume'].max()
+    print('Done')
+    return ret
 
 
 
