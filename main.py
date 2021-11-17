@@ -1,5 +1,5 @@
 ##
-import DataTools as DTs
+import ai_trader.DataTools as DTs
 import torch
 import torch.nn.init
 import torch.nn.functional as F
@@ -15,11 +15,14 @@ torch.cuda.is_available()
 stocks = DTs.data_import('2001-01-01', '2025-01-01')
 periodDiff_stocks = DTs.data_pre_process_period(stocks, period=5)
 DTs.data_pre_process_(stocks)
-stock_train = DTs.split(stocks, '2001-01-01', '2019-06-30')
-stock_test = DTs.split(stocks, '2019-07-01', '2025-01-01')
+stock_train_x = DTs.split(stocks, '2001-01-01', '2019-06-30')
+stock_train_y = DTs.split(periodDiff_stocks, '2001-01-01', '2019-06-30')
+stock_test_x = DTs.split(stocks, '2019-07-01', '2025-01-01')
+stock_test_y = DTs.split(periodDiff_stocks, '2019-07-01', '2025-01-01')
 ## dataset 설정
 input_t = 6 # 입력데이터 period 100 - 70 - 30 - 15 - 6 순...
 output_t = 1 # 출력데이터 period
+
 
 class stockdataset(Dataset):
     def __init__(self, stock):
@@ -222,7 +225,4 @@ for epoch in range(max_epoch):
 
     print(f"/////////////epoch{epoch} mean loss: {loss}///////////////")
 
-
-#######################################################################################################################
-################################################## 여기서부터 검증 ######################################################
 
