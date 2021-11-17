@@ -1,12 +1,13 @@
 import yfinance as yf
 
+
 def data_import(start_date='2003-01-01', end_date='2030-12-31'):
-    stock_spy = yf.download('^GSPC',start_date,end_date)
-    stock_nsdq = yf.download('^IXIC',start_date,end_date)
-    stock_tlt = yf.download('ZB=F',start_date,end_date)
-    stock_gold = yf.download('GC=F',start_date,end_date)
-    stock_oil = yf.download('CL=F',start_date,end_date)
-    
+    stock_spy = yf.download('^GSPC', start_date, end_date)
+    stock_nsdq = yf.download('^IXIC', start_date, end_date)
+    stock_tlt = yf.download('ZB=F', start_date, end_date)
+    stock_gold = yf.download('GC=F', start_date, end_date)
+    stock_oil = yf.download('CL=F', start_date, end_date)
+
     # 데이터 간격 맞추기: 빈날=전날값
     # self.data_gold = self.data_gold.reindex(self.data_spy.index, fill_value=0)
     stock_spy = stock_spy.reindex(stock_nsdq.index, method='ffill')
@@ -15,15 +16,16 @@ def data_import(start_date='2003-01-01', end_date='2030-12-31'):
     stock_gold = stock_gold.reindex(stock_nsdq.index, method='ffill')
     stock_oil = stock_oil.reindex(stock_nsdq.index, method='ffill')
 
-    return {'spy':stock_spy, 'nsdq':stock_nsdq, 'tlt':stock_tlt, 'gold':stock_gold, 'oil':stock_oil}
+    return {'spy': stock_spy, 'nsdq': stock_nsdq, 'tlt': stock_tlt, 'gold': stock_gold, 'oil': stock_oil}
+
 
 def split(data, start_date, end_date):
-
-    output={}
+    output = {}
     for i in data:
         output[i] = data[i].loc[start_date:end_date]
 
     return output
+
 
 def to_percentage(data):
     for i in range(1, len(data)):
@@ -38,18 +40,19 @@ def to_percentage(data):
 
     return data.iloc[1:]
 
+
 def to_percentage_period(data, period):
+    if len(data) < period: print('WARNING: period is bigger than data length')
 
-    if len(data)<period: print('WARNING: period is bigger than data length')
-
-    for i in range(1, len(data)-period):
+    for i in range(1, len(data) - period):
         temp = data.iloc[-i]  # 맨뒤
         temp2 = data.iloc[-(i + period)]
         newtemp = ((temp[0:6] / temp2[0:5]) - 1) * 100
         newtemp['Volume'] = temp['Volume']
         data.iloc[-i] = newtemp
     data['Volume'] = data['Volume'] / data['Volume'].max()
-    return data.iloc[period+1:]
+    return data.iloc[period + 1:]
+
 
 def data_pre_process_(data):
     print('Pre processing...')
@@ -60,18 +63,17 @@ def data_pre_process_(data):
     data['oil']['Volume'] = data['oil']['Volume'] / data['oil']['Volume'].max()
     print('Done')
 
+
+import copy
 def data_pre_process_period(data, period=5):
     print('Calculating Period diff...')
-    ret = data.copy()
-    ret['spy'] = to_percentage_period(ret['spy'],period)
-    ret['tlt'] = to_percentage_period(ret['tlt'],period)
-    ret['gold'] = to_percentage_period(ret['gold'],period)
-    ret['nsdq'] = to_percentage_period(ret['nsdq'],period)
+    ret = copy.deepcopy(data)
+    ret['spy'] = to_percentage_period(ret['spy'], period)
+    ret['tlt'] = to_percentage_period(ret['tlt'], period)
+    ret['gold'] = to_percentage_period(ret['gold'], period)
+    ret['nsdq'] = to_percentage_period(ret['nsdq'], period)
     ret['oil']['Volume'] = ret['oil']['Volume'] / ret['oil']['Volume'].max()
     print('Done')
     return ret
 
-
-
 ##
-
