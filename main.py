@@ -1,5 +1,5 @@
 ##
-import ai_trader.DataTools as DTs
+import DataTools as DTs
 import torch
 import torch.nn.init
 import torch.nn.functional as F
@@ -25,15 +25,21 @@ output_t = 1 # 출력데이터 period
 
 
 class stockdataset(Dataset):
-    def __init__(self, stock):
-        self.data_spy = stock['spy']
-        self.data_nsdq = stock['nsdq']
-        self.data_tlt = stock['tlt']
-        self.data_oil = stock['oil']
-        self.data_gold = stock['gold']
+    def __init__(self, stock_x, stock_y):
+        self.x_spy = stock_x['spy']
+        self.x_nsdq = stock_x['nsdq']
+        self.x_tlt = stock_x['tlt']
+        self.x_oil = stock_x['oil']
+        self.x_gold = stock_x['gold']
+
+        self.y_spy = stock_y['spy']
+        self.y_nsdq = stock_y['nsdq']
+        self.y_tlt = stock_y['tlt']
+        self.y_oil = stock_y['oil']
+        self.y_gold = stock_y['gold']
 
     def __len__(self):
-        return len(self.data_spy) - input_t - output_t + 1
+        return len(self.x_spy) - input_t - output_t + 1
 
     def __getitem__(self, i):
 
@@ -42,31 +48,31 @@ class stockdataset(Dataset):
             # permute 사용해서 색인 축(open,close등)과 day축을 교환
             return (torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float64)).float()).permute(1,0)
 
-        input_spy = pullout(self.data_spy, i, input_t)
-        input_tlt = pullout(self.data_tlt, i, input_t)
-        input_oil = pullout(self.data_oil, i, input_t)
-        input_gold = pullout(self.data_gold, i, input_t)
-        input_nsdq = pullout(self.data_nsdq, i, input_t)
+        input_spy = pullout(self.x_spy, i, input_t)
+        input_tlt = pullout(self.x_tlt, i, input_t)
+        input_oil = pullout(self.x_oil, i, input_t)
+        input_gold = pullout(self.x_gold, i, input_t)
+        input_nsdq = pullout(self.x_nsdq, i, input_t)
         input_dic = {'spy':input_spy, 'tlt':input_tlt, 'oil':input_oil, 'gold':input_gold, 'nsdq':input_nsdq}
 
-        output_spy = pullout(self.data_spy, i+input_t, output_t) # 출력값은 입력한 날 바로 다음날부터 가져옴!
-        output_tlt = pullout(self.data_tlt, i+input_t, output_t)
-        output_oil = pullout(self.data_oil, i+input_t, output_t)
-        output_gold = pullout(self.data_gold, i+input_t, output_t)
-        output_nsdq = pullout(self.data_nsdq, i+input_t, output_t)
+        output_spy = pullout(self.y_spy, i+input_t, output_t) # 출력값은 입력한 날 바로 다음날부터 가져옴!
+        output_tlt = pullout(self.y_tlt, i+input_t, output_t)
+        output_oil = pullout(self.y_oil, i+input_t, output_t)
+        output_gold = pullout(self.y_gold, i+input_t, output_t)
+        output_nsdq = pullout(self.y_nsdq, i+input_t, output_t)
         output_dic = {'spy': output_spy, 'tlt': output_tlt, 'oil': output_oil, 'gold': output_gold, 'nsdq': output_nsdq}
 
-        date = self.data_spy.index[i+input_t+output_t-1].strftime('%Y-%m-%d')
+        date = self.y_spy.index[i+input_t+output_t-1].strftime('%Y-%m-%d')
 
         return  date, input_dic, output_dic
 
 ## data 전처리 및 show
-trainData = stockdataset(stock_train)
-testData = stockdataset(stock_test)
+trainData = stockdataset(stock_train_x, stock_train_y)
+testData = stockdataset(stock_test_x, stock_test_y)
 
 '''
-trainData.data_spy.plot()
-testData.data_spy.plot()
+trainData.x_spy.plot()
+testData.y_spy.plot()
 plt.show()
 ''' # 데이터 plot
 
@@ -225,4 +231,6 @@ for epoch in range(max_epoch):
 
     print(f"/////////////epoch{epoch} mean loss: {loss}///////////////")
 
+
+##
 
