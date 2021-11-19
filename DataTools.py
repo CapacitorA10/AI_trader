@@ -32,7 +32,7 @@ def to_percentage(data):
         # 볼륨값을 제외한 나머지는 맨 뒤에서부터 앞에값의 차이로 구한다
         temp = data.iloc[-i]  # 맨뒤
         temp2 = data.iloc[-(i + 1)]  # 그 전날
-        newtemp = ((temp[0:6] / temp2[0:5]) - 1) * 100  # 당일/전날 하여 전날대비상승률 계산, 1을 빼서 정확한 %계산
+        newtemp = ((temp[0:5] / temp2[0:5]) - 1) * 100  # 당일/전날 하여 전날대비상승률 계산, 1을 빼서 정확한 %계산
         newtemp['Volume'] = temp['Volume']  # 볼륨값 유지
         data.iloc[-i] = newtemp
     # Volume 평준화 시행
@@ -47,7 +47,7 @@ def to_percentage_period(data, period):
     for i in range(1, len(data) - period):
         temp = data.iloc[-i]  # 맨뒤
         temp2 = data.iloc[-(i + period)]
-        newtemp = ((temp[0:6] / temp2[0:5]) - 1) * 100
+        newtemp = ((temp[0:5] / temp2[0:5]) - 1) * 100
         newtemp['Volume'] = temp['Volume']
         data.iloc[-i] = newtemp
     data['Volume'] = data['Volume'] / data['Volume'].max()
