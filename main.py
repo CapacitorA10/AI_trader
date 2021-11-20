@@ -11,17 +11,20 @@ from torch.utils.tensorboard import SummaryWriter
 writer = SummaryWriter()
 device = 'cuda'
 torch.cuda.is_available()
+
+input_t = 6 # 입력데이터 period 100 - 70 - 30 - 15 - 6 순...
+output_t = 1 # 출력데이터 길이
+period = 5 # 입력-출력간 기간
 ## data import
 stocks = DTs.data_import('2001-01-01', '2025-01-01')
-periodDiff_stocks = DTs.data_pre_process_period(stocks, period=5)
+periodDiff_stocks = DTs.data_pre_process_period(stocks, period=period)
 DTs.data_pre_process_(stocks)
 stock_train_x = DTs.split(stocks, '2001-01-01', '2019-06-30')
 stock_train_y = DTs.split(periodDiff_stocks, '2001-01-01', '2019-06-30')
 stock_test_x = DTs.split(stocks, '2019-07-01', '2025-01-01')
 stock_test_y = DTs.split(periodDiff_stocks, '2019-07-01', '2025-01-01')
 ## dataset 설정
-input_t = 6 # 입력데이터 period 100 - 70 - 30 - 15 - 6 순...
-output_t = 1 # 출력데이터 period
+
 
 
 class stockdataset(Dataset):
@@ -39,7 +42,7 @@ class stockdataset(Dataset):
         self.y_gold = stock_y['gold']
 
     def __len__(self):
-        return len(self.x_spy) - input_t - output_t + 1
+        return len(self.x_spy) - input_t - output_t - period + 1
 
     def __getitem__(self, i):
 
