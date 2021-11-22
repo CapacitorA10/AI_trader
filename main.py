@@ -1,5 +1,5 @@
 ##
-import DataTools as DTs
+import ai_trader.DataTools as DTs
 import torch
 import torch.nn.init
 import torch.nn.functional as F
@@ -12,7 +12,7 @@ writer = SummaryWriter()
 device = 'cuda'
 torch.cuda.is_available()
 
-input_t = 6 # 입력데이터 period 100 - 70 - 30 - 15 - 6 순...
+input_t = 6 # 입력데이터 period 100 - 70 - 30 - 15 - 6 등...
 output_t = 1 # 출력데이터 길이
 period = 5 # 입력-출력간 기간
 ## data import
@@ -49,7 +49,7 @@ class stockdataset(Dataset):
         # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
         def pullout(data,idx,period):
             # permute 사용해서 색인 축(open,close등)과 day축을 교환
-            return (torch.from_numpy(data.iloc[idx:idx+period].values.astype(np.float64)).float()).permute(1,0)
+            return (torch.from_numpy(data.iloc[idx:idx+period].values).float()).permute(1,0)
 
         input_spy = pullout(self.x_spy, i, input_t)
         input_tlt = pullout(self.x_tlt, i, input_t)
@@ -185,7 +185,7 @@ tb_avg_step2 = 0
 for epoch in range(max_epoch):
     loss = 0
     step = 0
-    date = 0
+
     for date, inVal, outVal in trainLoader:
         step += 1
         tb_step += 1
@@ -236,4 +236,3 @@ for epoch in range(max_epoch):
 
 
 ##
-
