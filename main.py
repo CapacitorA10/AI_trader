@@ -1,5 +1,5 @@
 ##
-import ai_trader.DataTools as DTs
+import DataTools as DTs
 import torch
 import torch.nn.init
 import torch.nn.functional as F
@@ -7,14 +7,14 @@ from torch.utils.data import DataLoader, Dataset
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+from datetime import timedelta
 from torch.utils.tensorboard import SummaryWriter
 writer = SummaryWriter()
 device = 'cuda'
-torch.cuda.is_available()
-
 input_t = 6 # 입력데이터 period 100 - 70 - 30 - 15 - 6 등...
 output_t = 1 # 출력데이터 길이
 period = 5 # 입력-출력간 기간
+torch.cuda.is_available()
 ## data import
 stocks = DTs.data_import('2001-01-01', '2025-01-01')
 periodDiff_stocks = DTs.data_pre_process_period(stocks, period=period)
@@ -24,9 +24,6 @@ stock_train_y = DTs.split(periodDiff_stocks, '2001-01-01', '2019-06-30')
 stock_test_x = DTs.split(stocks, '2019-07-01', '2025-01-01')
 stock_test_y = DTs.split(periodDiff_stocks, '2019-07-01', '2025-01-01')
 ## dataset 설정
-
-
-
 class stockdataset(Dataset):
     def __init__(self, stock_x, stock_y):
         self.x_spy = stock_x['spy']
@@ -45,27 +42,31 @@ class stockdataset(Dataset):
         return len(self.x_spy) - input_t - output_t - period + 1
 
     def __getitem__(self, i):
+        # x와 y시간계의 차이를 미리 구함
+        dateGap = self.y_spy.iloc[0].name.toordinal() - self.x_spy.iloc[0].name.toordinal()
 
-        # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
-        def pullout(data,idx,period):
+        def pullout(data,idx,idx2):
+            # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
             # permute 사용해서 색인 축(open,close등)과 day축을 교환
-            return (torch.from_numpy(data.iloc[idx:idx+period].values).float()).permute(1,0)
+            return (torch.from_numpy(data.iloc[idx:idx2].values).float()).permute(1,0)
 
-        input_spy = pullout(self.x_spy, i, input_t)
-        input_tlt = pullout(self.x_tlt, i, input_t)
-        input_oil = pullout(self.x_oil, i, input_t)
-        input_gold = pullout(self.x_gold, i, input_t)
-        input_nsdq = pullout(self.x_nsdq, i, input_t)
+        input_spy = pullout(self.x_spy, i, i+input_t)
+        input_tlt = pullout(self.x_tlt, i, i+input_t)
+        input_oil = pullout(self.x_oil, i, i+input_t)
+        input_gold = pullout(self.x_gold, i, i+input_t)
+        input_nsdq = pullout(self.x_nsdq, i, i+input_t)
         input_dic = {'spy':input_spy, 'tlt':input_tlt, 'oil':input_oil, 'gold':input_gold, 'nsdq':input_nsdq}
 
-        output_spy = pullout(self.y_spy, i+input_t, output_t) # 출력값은 입력한 날 바로 다음날부터 가져옴!
-        output_tlt = pullout(self.y_tlt, i+input_t, output_t)
-        output_oil = pullout(self.y_oil, i+input_t, output_t)
-        output_gold = pullout(self.y_gold, i+input_t, output_t)
-        output_nsdq = pullout(self.y_nsdq, i+input_t, output_t)
-        output_dic = {'spy': output_spy, 'tlt': output_tlt, 'oil': output_oil, 'gold': output_gold, 'nsdq': output_nsdq}
+        #output_spy = pullout(self.y_spy, i+input_t, i+input_t+output_t) # 출력값은 입력한 날 바로 다음날부터 가져옴!
+        #output_tlt = pullout(self.y_tlt, i+input_t, i+input_t+output_t)
+        #output_oil = pullout(self.y_oil, i+input_t, i+input_t+output_t)
+        #output_gold = pullout(self.y_gold, i+input_t, i+input_t+output_t)
+        #output_nsdq = pullout(self.y_nsdq, i+input_t, i+input_t+output_t)
+        output_spy = self.y_spy.loc[self.x_spy.index[i+input_t+period-1]]
+        output_dic = {'spy': torch.from_numpy(output_spy.values)}
+        #output_dic = {'spy': output_spy,'tlt': output_tlt, 'oil': output_oil, 'gold': output_gold, 'nsdq': output_nsdq}
 
-        date = self.y_spy.index[i+input_t+output_t-1].strftime('%Y-%m-%d')
+        date = output_spy.name.strftime('%Y-%m-%d')
 
         return  date, input_dic, output_dic
 
@@ -236,3 +237,5 @@ for epoch in range(max_epoch):
 
 
 ##
+##
+
