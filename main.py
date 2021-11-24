@@ -9,11 +9,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from datetime import timedelta
 from torch.utils.tensorboard import SummaryWriter
+
 writer = SummaryWriter()
 device = 'cuda'
-input_t = 6 # 입력데이터 period 100 - 70 - 30 - 15 - 6 등...
+input_t = int(input("input length? "))# 입력데이터 period 100 - 70 - 30 - 15 - 6 등...
+period = int(input("period term? "))#입력-출력간 기간
 output_t = 1 # 출력데이터 길이
-period = 5 # 입력-출력간 기간
+bSize = 64
 torch.cuda.is_available()
 ## data import
 stocks = DTs.data_import('2001-01-01', '2025-01-01')
@@ -33,21 +35,21 @@ class stockdataset(Dataset):
             self.y[i] = stock_y[i]
 
     def __len__(self):
-        return len(self.x['spy']) - input_t - output_t - period + 1
+        return len(self.x['spy']) - input_t - period + 1
 
     def __getitem__(self, i):
 
         targetDate = self.x['spy'].index[i + input_t + period - 1]
-        input_dic = {}
-        output_dic = {}
+        inp = {}
+        out = {}
         for j in self.x:
-            input_dic[j] = DTs.pullout(self.x[j], i, i+input_t)
+            inp[j] = DTs.pullout(self.x[j], i, i+input_t)
             outVal = self.y[j].loc[targetDate]
-            output_dic[j] = torch.from_numpy(outVal.values)
+            out[j] = torch.from_numpy(outVal.values)
 
         date = outVal.name.strftime('%Y-%m-%d')
 
-        return  date, input_dic, output_dic
+        return  date, inp, out
 
 ## data 전처리 및 show
 trainData = stockdataset(stock_train_x, stock_train_y)
@@ -145,9 +147,8 @@ class comb_model1(torch.nn.Module):
 
 ## train ready
 STOCKMODEL = comb_model1().to(device)
-STOCKMODEL.train()
 optimizer = torch.optim.Adam(STOCKMODEL.parameters(), lr=0.0001)
-trainLoader = DataLoader(dataset=trainData, batch_size=1, shuffle=True, num_workers=0)
+trainLoader = DataLoader(dataset=trainData, batch_size=bSize, shuffle=True, num_workers=0)
 testLoader = DataLoader(dataset=testData, batch_size=1, shuffle=False, num_workers=0)
 
 # tensorboard 그리기
@@ -171,6 +172,7 @@ for epoch in range(max_epoch):
         tb_step += 1
 
         # LEARNING START
+        STOCKMODEL.train()
         optimizer.zero_grad()
         pred = STOCKMODEL(inVal['spy'].to(device),
                           inVal['tlt'].to(device),
@@ -178,12 +180,12 @@ for epoch in range(max_epoch):
                           inVal['oil'].to(device),
                           inVal['nsdq'].to(device)).squeeze()
         # open/high/low/close/adjusted/volume
-        ans_spy = outVal['spy'][0][0].to(device)
+        ans_spy = outVal['spy'][:,0].to(device)
         cost = F.l1_loss(pred, ans_spy.squeeze(), reduction="none").to(device)
         cost.backward(cost)
         optimizer.step()
         # LOSS Calc
-        loss += cost.sum() / output_t
+        loss += cost.sum() / (output_t*bSize)
         writer.add_scalar("Loss/train", cost.sum() / output_t, tb_step)
 
         # verification
@@ -191,6 +193,7 @@ for epoch in range(max_epoch):
         step2 = 0
         if step % 2500 == 1:
             with torch.no_grad():
+                STOCKMODEL.eval()
                 for vDate, vInVal, vOutVal in testLoader:
                     vPred = STOCKMODEL(vInVal['spy'].to(device),
                                        vInVal['tlt'].to(device),
@@ -213,8 +216,8 @@ for epoch in range(max_epoch):
     loss /= step
 
     print(f"/////////////epoch{epoch} mean loss: {loss}///////////////")
+## 평가용
+STOCKMODEL.eval()
 
-
-##
 ##
 
