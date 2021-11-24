@@ -26,47 +26,26 @@ stock_test_y = DTs.split(periodDiff_stocks, '2019-07-01', '2025-01-01')
 ## dataset 설정
 class stockdataset(Dataset):
     def __init__(self, stock_x, stock_y):
-        self.x_spy = stock_x['spy']
-        self.x_nsdq = stock_x['nsdq']
-        self.x_tlt = stock_x['tlt']
-        self.x_oil = stock_x['oil']
-        self.x_gold = stock_x['gold']
-
-        self.y_spy = stock_y['spy']
-        self.y_nsdq = stock_y['nsdq']
-        self.y_tlt = stock_y['tlt']
-        self.y_oil = stock_y['oil']
-        self.y_gold = stock_y['gold']
+        self.x = {}
+        self.y = {}
+        for i in stock_x:
+            self.x[i] = stock_x[i]
+            self.y[i] = stock_y[i]
 
     def __len__(self):
-        return len(self.x_spy) - input_t - output_t - period + 1
+        return len(self.x['spy']) - input_t - output_t - period + 1
 
     def __getitem__(self, i):
-        # x와 y시간계의 차이를 미리 구함
-        dateGap = self.y_spy.iloc[0].name.toordinal() - self.x_spy.iloc[0].name.toordinal()
 
-        def pullout(data,idx,idx2):
-            # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
-            # permute 사용해서 색인 축(open,close등)과 day축을 교환
-            return (torch.from_numpy(data.iloc[idx:idx2].values).float()).permute(1,0)
+        targetDate = self.x['spy'].index[i + input_t + period - 1]
+        input_dic = {}
+        output_dic = {}
+        for j in self.x:
+            input_dic[j] = DTs.pullout(self.x[j], i, i+input_t)
+            outVal = self.y[j].loc[targetDate]
+            output_dic[j] = torch.from_numpy(outVal.values)
 
-        input_spy = pullout(self.x_spy, i, i+input_t)
-        input_tlt = pullout(self.x_tlt, i, i+input_t)
-        input_oil = pullout(self.x_oil, i, i+input_t)
-        input_gold = pullout(self.x_gold, i, i+input_t)
-        input_nsdq = pullout(self.x_nsdq, i, i+input_t)
-        input_dic = {'spy':input_spy, 'tlt':input_tlt, 'oil':input_oil, 'gold':input_gold, 'nsdq':input_nsdq}
-
-        #output_spy = pullout(self.y_spy, i+input_t, i+input_t+output_t) # 출력값은 입력한 날 바로 다음날부터 가져옴!
-        #output_tlt = pullout(self.y_tlt, i+input_t, i+input_t+output_t)
-        #output_oil = pullout(self.y_oil, i+input_t, i+input_t+output_t)
-        #output_gold = pullout(self.y_gold, i+input_t, i+input_t+output_t)
-        #output_nsdq = pullout(self.y_nsdq, i+input_t, i+input_t+output_t)
-        output_spy = self.y_spy.loc[self.x_spy.index[i+input_t+period-1]]
-        output_dic = {'spy': torch.from_numpy(output_spy.values)}
-        #output_dic = {'spy': output_spy,'tlt': output_tlt, 'oil': output_oil, 'gold': output_gold, 'nsdq': output_nsdq}
-
-        date = output_spy.name.strftime('%Y-%m-%d')
+        date = outVal.name.strftime('%Y-%m-%d')
 
         return  date, input_dic, output_dic
 
@@ -172,12 +151,12 @@ trainLoader = DataLoader(dataset=trainData, batch_size=1, shuffle=True, num_work
 testLoader = DataLoader(dataset=testData, batch_size=1, shuffle=False, num_workers=0)
 
 # tensorboard 그리기
-_, sample, _ = next(iter(trainLoader))
-writer.add_graph(STOCKMODEL,[sample['spy'].to(device)
-                            ,sample['tlt'].to(device)
-                            ,sample['gold'].to(device)
-                            ,sample['oil'].to(device)
-                            ,sample['nsdq'].to(device)])
+_, sample_x, sample_y = next(iter(trainLoader))
+writer.add_graph(STOCKMODEL,[sample_x['spy'].to(device)
+                            ,sample_x['tlt'].to(device)
+                            ,sample_x['gold'].to(device)
+                            ,sample_x['oil'].to(device)
+                            ,sample_x['nsdq'].to(device)])
 max_epoch = 15
 tb_step = 0
 tb_step2 = 0
