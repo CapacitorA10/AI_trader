@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader, Dataset
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from datetime import timedelta
 from torch.utils.tensorboard import SummaryWriter
 
 writer = SummaryWriter()
@@ -217,16 +216,18 @@ for epoch in range(max_epoch):
 
     print(f"/////////////epoch{epoch} mean loss: {loss}///////////////")
 ## 평가용
-STOCKMODEL.eval()
+
 w = {}
 for i in stock_test_x:
-    w[i] = (torch.from_numpy(stock_test_x[i].iloc[-6:].values)).float().permute(1, 0).unsqueeze(0)
+    w[i] = (torch.from_numpy(stock_test_x[i].iloc[-input_t:].values)).float().permute(1, 0).unsqueeze(0)
 ##
-wPred = STOCKMODEL(w['spy'].to(device),
-                    w['tlt'].to(device),
-                    w['gold'].to(device),
-                    w['oil'].to(device),
-                    w['nsdq'].to(device)).squeeze()
+with torch.no_grad():
+    STOCKMODEL.eval()
+    wPred = STOCKMODEL(w['spy'].to(device),
+                        w['tlt'].to(device),
+                        w['gold'].to(device),
+                        w['oil'].to(device),
+                        w['nsdq'].to(device)).squeeze()
 print(f"Predicted spy rate after {period}days: {wPred}")
 
 ##
