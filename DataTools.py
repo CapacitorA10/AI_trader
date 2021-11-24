@@ -76,4 +76,9 @@ def data_pre_process_period(data, period=5):
     print('Done')
     return ret
 
+import torch
+def pullout(data, idx, idx2):
+    # pytorch가 이용 가능한 형태로 데이터 추출(index 및 기간 설정)
+    # permute 사용해서 색인 축(open,close등)과 day축을 교환
+    return (torch.from_numpy(data.iloc[idx:idx2].values).float()).permute(1, 0)
 ##
