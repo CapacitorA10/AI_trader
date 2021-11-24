@@ -15,7 +15,7 @@ device = 'cuda'
 input_t = int(input("input length? "))# 입력데이터 period 100 - 70 - 30 - 15 - 6 등...
 period = int(input("period term? "))#입력-출력간 기간
 output_t = 1 # 출력데이터 길이
-bSize = 64
+bSize = 32
 torch.cuda.is_available()
 ## data import
 stocks = DTs.data_import('2001-01-01', '2025-01-01')
@@ -186,12 +186,12 @@ for epoch in range(max_epoch):
         optimizer.step()
         # LOSS Calc
         loss += cost.sum() / (output_t*bSize)
-        writer.add_scalar("Loss/train", cost.sum() / output_t, tb_step)
+        writer.add_scalar("Loss/train", cost.sum() / (output_t*bSize), tb_step)
 
         # verification
         vLoss = 0
         step2 = 0
-        if step % 2500 == 1:
+        if step % 100 == 1:
             with torch.no_grad():
                 STOCKMODEL.eval()
                 for vDate, vInVal, vOutVal in testLoader:
@@ -218,6 +218,16 @@ for epoch in range(max_epoch):
     print(f"/////////////epoch{epoch} mean loss: {loss}///////////////")
 ## 평가용
 STOCKMODEL.eval()
+w = {}
+for i in stock_test_x:
+    w[i] = (torch.from_numpy(stock_test_x[i].iloc[-6:].values)).float().permute(1, 0).unsqueeze(0)
+##
+wPred = STOCKMODEL(w['spy'].to(device),
+                    w['tlt'].to(device),
+                    w['gold'].to(device),
+                    w['oil'].to(device),
+                    w['nsdq'].to(device)).squeeze()
+print(f"Predicted spy rate after {period}days: {wPred}")
 
 ##
 
