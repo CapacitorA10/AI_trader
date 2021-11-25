@@ -55,8 +55,8 @@ trainData = stockdataset(stock_train_x, stock_train_y)
 testData = stockdataset(stock_test_x, stock_test_y)
 
 '''
-trainData.x_spy.plot()
-testData.y_spy.plot()
+trainData.x['spy'].plot()
+testData.y['spy'].plot()
 plt.show()
 ''' # 데이터 plot
 
@@ -99,6 +99,7 @@ class comb_model1(torch.nn.Module):
             #torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
         )
+        '''
         self.OilLayer = torch.nn.Sequential(
             # input = open/high/low/close/adjusted/volume
             torch.nn.Conv1d(6, 64, kernel_size=7, padding=3, bias=True),  # input:6개, ouput:64, 7일치 단위
@@ -110,6 +111,7 @@ class comb_model1(torch.nn.Module):
             # torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
         )
+        '''
         self.NasdaqLayer = torch.nn.Sequential(
             # input = open/high/low/close/adjusted/volume
             torch.nn.Conv1d(6, 64, kernel_size=7, padding=3, bias=True),  # input:6개, ouput:64, 7일치 단위
@@ -135,10 +137,10 @@ class comb_model1(torch.nn.Module):
         snp = self.SnPLayer(snp)
         bond = self.BondLayer(bond)
         gold = self.GoldLayer(gold)
-        oil = self.OilLayer(oil)
+        #oil = self.OilLayer(oil)
         nasdaq = self.NasdaqLayer(nasdaq)
 
-        out = torch.cat((snp, bond, gold, oil, nasdaq), 1)
+        out = torch.cat((snp, bond, gold, nasdaq),1)# oil, nasdaq), 1)
         out = self.CombiLayer(out)
         out = out.view(out.size(0), -1)   # Flatten them for FC
         out = self.fc(out)
@@ -155,8 +157,8 @@ _, sample_x, sample_y = next(iter(trainLoader))
 writer.add_graph(STOCKMODEL,[sample_x['spy'].to(device)
                             ,sample_x['tlt'].to(device)
                             ,sample_x['gold'].to(device)
-                            ,sample_x['oil'].to(device)
-                            ,sample_x['nsdq'].to(device)])
+
+                            ,sample_x['nsdq'].to(device)]) #,sample_x['oil'].to(device)
 max_epoch = 15
 tb_step = 0
 tb_step2 = 0
