@@ -55,8 +55,8 @@ trainData = stockdataset(stock_train_x, stock_train_y)
 testData = stockdataset(stock_test_x, stock_test_y)
 
 '''
-trainData.x_spy.plot()
-testData.y_spy.plot()
+trainData.x['spy'].plot()
+testData.y['spy'].plot()
 plt.show()
 ''' # 데이터 plot
 
