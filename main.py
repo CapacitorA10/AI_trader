@@ -1,5 +1,5 @@
 ##
-import DataTools as DTs
+import ai_trader.DataTools as DTs
 import torch
 import torch.nn.init
 import torch.nn.functional as F
@@ -99,32 +99,8 @@ class comb_model1(torch.nn.Module):
             #torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
         )
-        '''
-        self.OilLayer = torch.nn.Sequential(
-            # input = open/high/low/close/adjusted/volume
-            torch.nn.Conv1d(6, 64, kernel_size=7, padding=3, bias=True),  # input:6개, ouput:64, 7일치 단위
-            torch.nn.BatchNorm1d(64),  # 출력shape:([B, 64, 30])
-            torch.nn.MaxPool1d(2, stride=2),
-            torch.nn.ReLU(),
-            torch.nn.Conv1d(64, 64, kernel_size=5, padding=2, bias=True),  # 5일치 단위
-            torch.nn.BatchNorm1d(64),  # 출력shape:([B, 128, 30])
-            # torch.nn.MaxPool1d(2, stride=2),
-            torch.nn.ReLU()
-        )
-        '''
-        self.NasdaqLayer = torch.nn.Sequential(
-            # input = open/high/low/close/adjusted/volume
-            torch.nn.Conv1d(6, 64, kernel_size=7, padding=3, bias=True),  # input:6개, ouput:64, 7일치 단위
-            torch.nn.BatchNorm1d(64),  # 출력shape:([B, 64, 30])
-            torch.nn.MaxPool1d(2, stride=2),
-            torch.nn.ReLU(),
-            torch.nn.Conv1d(64, 64, kernel_size=5, padding=2, bias=True),  # 5일치 단위
-            torch.nn.BatchNorm1d(64),  # 출력shape:([B, 128, 30])
-            # torch.nn.MaxPool1d(2, stride=2),
-            torch.nn.ReLU()
-        )
         self.CombiLayer = torch.nn.Sequential(
-            torch.nn.Conv1d(320, 384, kernel_size=5, padding=2, bias=True),
+            torch.nn.Conv1d(192, 384, kernel_size=5, padding=2, bias=True),
             torch.nn.BatchNorm1d(384),
             torch.nn.ReLU(),
             torch.nn.Conv1d(384, 384, kernel_size=3, padding=1, bias=True),
@@ -133,14 +109,14 @@ class comb_model1(torch.nn.Module):
         )
         self.fc = torch.nn.Linear(384*(input_t//2), output_t, bias=True) #input//2한 이유: 중간에 maxpool이 1번뿐이기 때문
 
-    def forward(self, snp, bond, gold, oil, nasdaq):
+    def forward(self, snp, bond, gold):
         snp = self.SnPLayer(snp)
         bond = self.BondLayer(bond)
         gold = self.GoldLayer(gold)
         #oil = self.OilLayer(oil)
-        nasdaq = self.NasdaqLayer(nasdaq)
+        #nasdaq = self.NasdaqLayer(nasdaq)
 
-        out = torch.cat((snp, bond, gold, nasdaq),1)# oil, nasdaq), 1)
+        out = torch.cat((snp, bond, gold),1)#oil, nasdaq), 1)
         out = self.CombiLayer(out)
         out = out.view(out.size(0), -1)   # Flatten them for FC
         out = self.fc(out)
@@ -156,9 +132,8 @@ testLoader = DataLoader(dataset=testData, batch_size=1, shuffle=False, num_worke
 _, sample_x, sample_y = next(iter(trainLoader))
 writer.add_graph(STOCKMODEL,[sample_x['spy'].to(device)
                             ,sample_x['tlt'].to(device)
-                            ,sample_x['gold'].to(device)
+                            ,sample_x['gold'].to(device)])
 
-                            ,sample_x['nsdq'].to(device)]) #,sample_x['oil'].to(device)
 max_epoch = 15
 tb_step = 0
 tb_step2 = 0
@@ -177,9 +152,7 @@ for epoch in range(max_epoch):
         optimizer.zero_grad()
         pred = STOCKMODEL(inVal['spy'].to(device),
                           inVal['tlt'].to(device),
-                          inVal['gold'].to(device),
-                          inVal['oil'].to(device),
-                          inVal['nsdq'].to(device)).squeeze()
+                          inVal['gold'].to(device)).squeeze()
         # open/high/low/close/adjusted/volume
         ans_spy = outVal['spy'][:,0].to(device)
         cost = F.l1_loss(pred, ans_spy.squeeze(), reduction="none").to(device)
@@ -198,9 +171,7 @@ for epoch in range(max_epoch):
                 for vDate, vInVal, vOutVal in testLoader:
                     vPred = STOCKMODEL(vInVal['spy'].to(device),
                                        vInVal['tlt'].to(device),
-                                       vInVal['gold'].to(device),
-                                       vInVal['oil'].to(device),
-                                       vInVal['nsdq'].to(device)).squeeze()
+                                       vInVal['gold'].to(device)).squeeze()
                     vAns_spy = vOutVal['spy'][0][0].to(device)
                     vCost = F.l1_loss(vPred, vAns_spy.squeeze(), reduction="none").to(device)
                     writer.add_scalar("Loss/Test", vCost.sum() / output_t, tb_step2)
@@ -227,10 +198,7 @@ with torch.no_grad():
     STOCKMODEL.eval()
     wPred = STOCKMODEL(w['spy'].to(device),
                         w['tlt'].to(device),
-                        w['gold'].to(device),
-                        w['oil'].to(device),
-                        w['nsdq'].to(device)).squeeze()
+                        w['gold'].to(device)).squeeze()
 print(f"Predicted spy rate after {period}days: {wPred}")
 
 ##
-
