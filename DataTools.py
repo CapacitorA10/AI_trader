@@ -3,20 +3,16 @@ import yfinance as yf
 
 def data_import(start_date='2003-01-01', end_date='2030-12-31'):
     stock_spy = yf.download('^GSPC', start_date, end_date)
-    stock_nsdq = yf.download('^IXIC', start_date, end_date)
     stock_tlt = yf.download('ZB=F', start_date, end_date)
     stock_gold = yf.download('GC=F', start_date, end_date)
-    stock_oil = yf.download('CL=F', start_date, end_date)
 
     # 데이터 간격 맞추기: 빈날=전날값
     # self.data_gold = self.data_gold.reindex(self.data_spy.index, fill_value=0)
-    stock_spy = stock_spy.reindex(stock_nsdq.index, method='ffill')
-    stock_nsdq = stock_nsdq.reindex(stock_nsdq.index, method='ffill')
-    stock_tlt = stock_tlt.reindex(stock_nsdq.index, method='ffill')
-    stock_gold = stock_gold.reindex(stock_nsdq.index, method='ffill')
-    stock_oil = stock_oil.reindex(stock_nsdq.index, method='ffill')
+    stock_spy = stock_spy.reindex(stock_spy.index, method='ffill')
+    stock_tlt = stock_tlt.reindex(stock_spy.index, method='ffill')
+    stock_gold = stock_gold.reindex(stock_spy.index, method='ffill')
 
-    return {'spy': stock_spy, 'nsdq': stock_nsdq, 'tlt': stock_tlt, 'gold': stock_gold, 'oil': stock_oil}
+    return {'spy': stock_spy, 'tlt': stock_tlt, 'gold': stock_gold}
 
 
 def split(data, start_date, end_date):
@@ -59,8 +55,6 @@ def data_pre_process_(data):
     data['spy'] = to_percentage(data['spy'])
     data['tlt'] = to_percentage(data['tlt'])
     data['gold'] = to_percentage(data['gold'])
-    data['nsdq'] = to_percentage(data['nsdq'])
-    data['oil']['Volume'] = data['oil']['Volume'] / data['oil']['Volume'].max()
     print('Done')
 
 
@@ -71,8 +65,6 @@ def data_pre_process_period(data, period=5):
     ret['spy'] = to_percentage_period(ret['spy'], period)
     ret['tlt'] = to_percentage_period(ret['tlt'], period)
     ret['gold'] = to_percentage_period(ret['gold'], period)
-    ret['nsdq'] = to_percentage_period(ret['nsdq'], period)
-    ret['oil']['Volume'] = ret['oil']['Volume'] / ret['oil']['Volume'].max()
     print('Done')
     return ret
 
