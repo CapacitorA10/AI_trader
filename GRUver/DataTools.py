@@ -1,19 +1,18 @@
 import yfinance as yf
 
 
-def data_import(start_date='2003-01-01', end_date='2030-12-31'):
-    stock_spy = yf.download('^GSPC', start_date, end_date)
-    stock_tlt = yf.download('ZB=F', start_date, end_date)
-    stock_gold = yf.download('GC=F', start_date, end_date)
-
+def data_import(start_date='2003-01-01', end_date='2030-12-31', item=['^IXIC','^TNX','GC=F']):
+    stock = yf.download(item, start_date, end_date, group_by = 'column')
+    stock = stock.drop('Volume', axis=1)
+    stock = stock.drop('High', axis=1)
+    stock = stock.drop('Low', axis=1)
+    stock = stock.drop('Adj Close', axis=1)
     # 데이터 간격 맞추기: 빈날=전날값
-    # self.data_gold = self.data_gold.reindex(self.data_spy.index, fill_value=0)
-    stock_spy = stock_spy.reindex(stock_spy.index, method='ffill')
-    stock_tlt = stock_tlt.reindex(stock_spy.index, method='ffill')
-    stock_gold = stock_gold.reindex(stock_spy.index, method='ffill')
-
-    return {'spy': stock_spy, 'tlt': stock_tlt, 'gold': stock_gold}
-
+    #stock = stock.reindex(stock.index, method='ffill')
+    nsdqIndex = stock.columns[1]
+    for i in stock.columns:
+        stock[i] = stock[i].reindex(stock[nsdqIndex].index, method='ffill')
+    return stock
 
 def split(data, start_date, end_date):
     output = {}
