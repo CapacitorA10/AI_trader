@@ -1,6 +1,7 @@
 import yfinance as yf
 
 
+
 def data_import(start_date='2003-01-01', end_date='2030-12-31', item=['^IXIC','^TNX','GC=F']):
     stock = yf.download(item, start_date, end_date, group_by = 'column')
     stock = stock.drop('Volume', axis=1)
@@ -9,9 +10,7 @@ def data_import(start_date='2003-01-01', end_date='2030-12-31', item=['^IXIC','^
     stock = stock.drop('Adj Close', axis=1)
     # 데이터 간격 맞추기: 빈날=전날값
     #stock = stock.reindex(stock.index, method='ffill')
-    nsdqIndex = stock.columns[1]
-    for i in stock.columns:
-        stock[i] = stock[i].reindex(stock[nsdqIndex].index, method='ffill')
+    stock = stock.fillna(method='ffill')
     return stock
 
 def split(data, start_date, end_date):
