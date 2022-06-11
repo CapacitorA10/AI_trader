@@ -1,6 +1,5 @@
 import yfinance as yf
-
-
+import pandas as pd
 
 def data_import(start_date='2003-01-01', end_date='2030-12-31', item=['^IXIC','^TNX','GC=F']):
     stock = yf.download(item, start_date, end_date, group_by = 'column')
@@ -21,32 +20,17 @@ def split(data, start_date, end_date):
     return output
 
 
-def to_percentage(data):
-    for i in range(1, len(data)):
-        # 볼륨값을 제외한 나머지는 맨 뒤에서부터 앞에값의 차이로 구한다
-        temp = data.iloc[-i]  # 맨뒤
-        temp2 = data.iloc[-(i + 1)]  # 그 전날
-        newtemp = ((temp[0:5] / temp2[0:5]) - 1) * 100  # 당일/전날 하여 전날대비상승률 계산, 1을 빼서 정확한 %계산
-        newtemp['Volume'] = temp['Volume']  # 볼륨값 유지
-        data.iloc[-i] = newtemp
-    # Volume 평준화 시행
-    data['Volume'] = data['Volume'] / data['Volume'].max()
+def pct_change_except_bond(stk, period=1):
+    df = stk.copy()
+    #multi index column이라면 flatten
+    df.columns = pd.Index([e[0] + e[1] for e in df.columns.tolist()])
 
-    return data.iloc[1:]
+    # 채권 빼고 변화율로..
+    for i in df.columns:
+        if not 'TNX' in i:
+            df[i] = df[i].pct_change(period) * 100
 
-
-def to_percentage_period(data, period):
-    if len(data) < period: print('WARNING: period is bigger than data length')
-
-    for i in range(1, len(data) - period):
-        temp = data.iloc[-i]  # 맨뒤
-        temp2 = data.iloc[-(i + period)]
-        newtemp = ((temp[0:5] / temp2[0:5]) - 1) * 100
-        newtemp['Volume'] = temp['Volume']
-        data.iloc[-i] = newtemp
-    data['Volume'] = data['Volume'] / data['Volume'].max()
-    return data.iloc[period + 1:]
-
+    return df
 
 def data_pre_process_(data):
     print('Pre processing...')
