@@ -1,5 +1,5 @@
 ##
-import ai_trader.DataTools as DTs
+import DataTools as DTs
 import torch
 import torch.nn as nn
 import torch.nn.init
@@ -8,7 +8,9 @@ from torch.utils.data import DataLoader, Dataset
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
 
 writer = SummaryWriter()
 device = 'cuda'
@@ -34,26 +36,22 @@ stocks_days_change =  DTs.pct_change_except_bond(stocks, 15)
 #stock_5day_y = DTs.split(stocks_15day_change, '2019-07-01', '2025-01-01')
 
 # 입출력 / test train 으로 나누기
-stock_x_train = stocks_1day_change.loc['2000-01-01' : '2019-06-30']
-stock_y_train = stocks_days_change.loc['2000-01-01' : '2019-06-30']
-stock_x_test = stocks_1day_change.loc['2019-07-01' : '2025-01-01']
-stock_y_test = stocks_days_change.loc['2019-07-01' : '2025-01-01']
-## time step 단위로 쪼개기
-X_train, Y_train = [], []
-X_test, Y_test = [], []
-for i in range(time_step, len(stock_x_train) - 1):
-    X_train.append(stock_x_train[i-time_step : i])
+X_train = stocks_1day_change.loc['2000-01-01' : '2019-06-30']
+Y_train = stocks_days_change.loc['2000-01-01' : '2019-06-30']
+X_test = stocks_1day_change.loc['2019-07-01' : '2025-01-01']
+Y_test = stocks_days_change.loc['2019-07-01' : '2025-01-01']
 
-for i in range(time_step, len(stock_y_train) - 1):
-    Y_train.append(stock_y_train[i-time_step : i])
+X_train = DTs.append_time_step(X_train, time_step)
+Y_train = DTs.append_time_step(Y_train, time_step)
+X_test =  DTs.append_time_step(X_test, time_step)
+Y_test =  DTs.append_time_step(Y_test, time_step)
 
-for i in range(time_step, len(stock_x_test) - 1):
-    X_test.append(stock_x_test[i-time_step : i])
 
-for i in range(time_step, len(stock_y_test) - 1):
-    Y_test.append(stock_y_test[i-time_step : i])
-X_train, Y_train = torch.tensor(X_train), torch.tensor(Y_train)
-X_test, Y_test = torch.tensor(X_test), torch.tensor(Y_test)
+#print(f"Shape:\n Xtrain:{X_train.shape} Ytrain:{Y_train.shape}\n Xtest:{X_test.shape} Ytest:{Y_test.shape}")
+## 데이터 후가공
+#mm = MinMaxScaler()
+#ss = StandardScaler()
+
 
 
 ## Model Define
@@ -69,8 +67,8 @@ class GRU(nn.Module):
 
         self.gru = nn.GRU(input_size=input_size, hidden_size=hidden_size,
                           num_layers=num_layers, batch_first=True)
-        self.fc_1 = nn.Linear(hidden_size, 128)
-        self.fc = nn.Linear(128, num_classes)
+        self.fc_1 = nn.Linear(hidden_size, 64)
+        self.fc = nn.Linear(64, num_classes)
         self.relu = nn.ReLU()
 
     def forward(self, x):
