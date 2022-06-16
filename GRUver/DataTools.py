@@ -1,6 +1,6 @@
 import yfinance as yf
 import pandas as pd
-
+import numpy as np
 def data_import(start_date='2003-01-01', end_date='2030-12-31', item=['^IXIC','^TNX','GC=F']):
     stock = yf.download(item, start_date, end_date, group_by = 'column')
     stock = stock.drop('Volume', axis=1)
@@ -19,6 +19,11 @@ def split(data, start_date, end_date):
 
     return output
 
+def append_time_step(data, time_step):
+    output = []
+    for i in range(time_step, len(data) - 1):
+        output.append(data[i - time_step: i])
+    return output
 
 def pct_change_except_bond(stk, period=1):
     df = stk.copy()
