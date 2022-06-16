@@ -22,7 +22,7 @@ def split(data, start_date, end_date):
 
 def pct_change_except_bond(stk, period=1):
     df = stk.copy()
-    #multi index column이라면 flatten
+    #multi index column이라면 column index를 flatten
     df.columns = pd.Index([e[0] + e[1] for e in df.columns.tolist()])
 
     # 채권 빼고 변화율로..
@@ -30,25 +30,7 @@ def pct_change_except_bond(stk, period=1):
         if not 'TNX' in i:
             df[i] = df[i].pct_change(period) * 100
 
-    return df
-
-def data_pre_process_(data):
-    print('Pre processing...')
-    data['spy'] = to_percentage(data['spy'])
-    data['tlt'] = to_percentage(data['tlt'])
-    data['gold'] = to_percentage(data['gold'])
-    print('Done')
-
-
-import copy
-def data_pre_process_period(data, period=5):
-    print('Calculating Period diff...')
-    ret = copy.deepcopy(data)
-    ret['spy'] = to_percentage_period(ret['spy'], period)
-    ret['tlt'] = to_percentage_period(ret['tlt'], period)
-    ret['gold'] = to_percentage_period(ret['gold'], period)
-    print('Done')
-    return ret
+    return df.iloc[period:]
 
 import torch
 def pullout(data, idx, idx2):
