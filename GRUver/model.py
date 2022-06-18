@@ -18,7 +18,7 @@ class GRU(nn.Module):
         self.tanh = nn.Tanh()
 
     def forward(self, x):
-        h_0 = (torch.zeros(self.num_layers, x.size(0), self.hidden_size)).to(device)
+        h_0 = (torch.zeros(self.num_layers, x.size(0), self.hidden_size)).to('cuda')
         output, (hn) = self.gru(x, (h_0))
         hn = hn.view(-1, self.hidden_size)
         out = self.tanh(hn)
