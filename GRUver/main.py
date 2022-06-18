@@ -9,13 +9,17 @@ from tensorboardX import SummaryWriter
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 writer = SummaryWriter()
-device = 'cuda'
+device = 'cpu'
 torch.cuda.is_available()
 
 time_step = 20
-time_term = 15  # time step 막날로부터 xx일 후 예측
+time_term = 5  # time step 막날로부터 xx일 후 예측
+"""if time_term > time_step:
+    print("ERR: time step MUST bigger than time term")
+    exit()"""
 bSize = 2  # 배치 사이즈
 learning_rate = 0.0001
+num_epochs = 50
 
 stocks = DTs.data_import('2000-09-01', '2025-01-01')  # item변수 전달 안하면, 기본 3개 나스닥 채권 금만 return
 stocks_1day_change = DTs.pct_change_except_bond(stocks)
@@ -25,13 +29,14 @@ stocks_days_change = DTs.pct_change_except_bond(stocks, time_term)
 # ss = StandardScaler()
 
 ## data split / XY merge
-X_train = DTs.append_time_step(stocks_1day_change.loc['2000-01-01': '2019-06-30'],
-                               stocks_days_change.loc['2000-01-01': '2019-06-30'],
-                               time_step, 1)
+split_date = '2020-12-30'
+X_train = DTs.append_time_step(stocks_1day_change.loc['2000-01-01': split_date],
+                               stocks_days_change.loc['2000-01-01': split_date],
+                               time_step, time_term)
 
-X_test = DTs.append_time_step(stocks_1day_change.loc['2019-07-01': '2025-01-01'],
-                              stocks_days_change.loc['2019-07-01': '2025-01-01'],
-                              time_step, 1)
+X_test = DTs.append_time_step(stocks_1day_change.loc[split_date: '2025-01-01'],
+                              stocks_days_change.loc[split_date: '2025-01-01'],
+                              time_step, time_term)
 
 X_train = torch.FloatTensor(np.asarray(X_train)).to(device)
 X_test = torch.FloatTensor(np.asarray(X_test)).to(device)
@@ -45,7 +50,7 @@ test_loader = torch.utils.data.DataLoader(dataset=X_test, batch_size=1, shuffle=
 
 
 input_size = X_train.shape[-1]
-gru_out_size = 12  # (==hidden size)
+gru_out_size = 6  # (==hidden size)
 num_layers = 1
 num_classes = X_train.shape[-1] // 2  # 출력은 나스닥 채권 금 close.. (+달러인덱스도?
 
@@ -56,9 +61,6 @@ optimizer = torch.optim.RMSprop(MODEL.parameters(), lr=learning_rate)
 writer.add_graph(MODEL, X_train)
 writer.add_graph(MODEL, X_test)
 
-loss_graph = []  # 그래프 그릴 목적인 loss.
-n = len(train_loader)
-num_epochs = 20
 ##
 step = 0
 v_step = 0
@@ -96,9 +98,12 @@ for epoch in range(num_epochs):
                     writer.add_scalar("PREDICTED/NSDQ", out.squeeze()[1], v_step)
                     writer.add_scalar("PREDICTED/TRES", out.squeeze()[2], v_step)
                     v_step += 1
-                print(f"TEST:  epoch/step:{epoch}/{step},  avg loss:{avg_test / X_test.shape[0]}")
-
-    print(f"TRAIN: epoch:{epoch},        avg loss:{avg_train / X_train.shape[0]}\n")
+                print(f"TEST:  epoch/step: {epoch}/{step},  avg loss: {avg_test / X_test.shape[0]}")
+        torch.cuda.empty_cache()
+    print(f"TRAIN: epoch: {epoch},  avg loss: {avg_train / X_train.shape[0]}\n")
 ## 최종 모델로 오늘로부터 3주 보기
-experiments = torch.FloatTensor(np.asarray(stocks_1day_change.iloc[-20:, :])).unsqueeze(0)
+experiments = torch.FloatTensor(np.asarray(stocks_1day_change.iloc[-time_step:, :])).unsqueeze(0)
 predicted = MODEL(experiments.to(device))
+print(predicted)
+##
+
