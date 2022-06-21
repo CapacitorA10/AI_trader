@@ -1,15 +1,15 @@
 ##
-import DataTools as DTs
-from model import GRU
+import ai_trader.DataTools as DTs
+from ai_trader.model import GRU
 import torch.nn.init
 from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 writer = SummaryWriter()
-device = 'cpu'
+device = 'cuda'
 torch.cuda.is_available()
 
 time_step = 20
@@ -44,7 +44,9 @@ X_test = torch.FloatTensor(np.asarray(X_test)).to(device)
 train_loader = torch.utils.data.DataLoader(dataset=X_train, batch_size=bSize, shuffle=True)
 test_loader = torch.utils.data.DataLoader(dataset=X_test, batch_size=1, shuffle=False)
 # print(f"Shape:\n Xtrain:{X_train.shape} Ytrain:{Y_train.shape}\n Xtest:{X_test.shape} Ytest:{Y_test.shape}")
-
+# test가 시작하는 때의 value(그래프 그리기용)
+test_start_idx = stocks.index.get_loc(split_date)
+test_real_start = torch.FloatTensor(stocks.iloc[test_start_idx - time_term,0:3]).to(device)
 
 ## START LEARN
 
@@ -80,10 +82,15 @@ for epoch in range(num_epochs):
         writer.add_scalar("Loss/train", loss.sum() / bSize, step)
         step += 1
         avg_train += loss
-        # verification
 
+        # verification
         if step % 2000 == 0:
             avg_test = 0
+            # 변화량 ->실제값 그래프 그리기 위해 값 추출
+            gold = test_real_start[0]
+            nasdaq = test_real_start[1]
+            bond = test_real_start[2]
+            i_step = 0
             with torch.no_grad():
                 MODEL.eval()
                 for test_data in test_loader:
@@ -97,6 +104,17 @@ for epoch in range(num_epochs):
                     writer.add_scalar("PREDICTED/GOLD", out.squeeze()[0], v_step)
                     writer.add_scalar("PREDICTED/NSDQ", out.squeeze()[1], v_step)
                     writer.add_scalar("PREDICTED/TRES", out.squeeze()[2], v_step)
+                    gold *= (100 + out.squeeze()[0]) * 0.01
+                    nasdaq *= (100 + out.squeeze()[1]) * 0.01
+                    bond *= (100 + out.squeeze()[2]) * 0.01
+                    date_now = test_start_idx + time_term + time_step + i_step
+                    writer.add_scalars("static-GOLD",{"REAL": stocks.iat[date_now, 0],
+                                                      "PRED": gold} , v_step)
+                    writer.add_scalars("static-NSDQ", {"REAL": stocks.iat[date_now, 1],
+                                                       "PRED": nasdaq}, v_step)
+                    writer.add_scalars("static-TRES", {"REAL": stocks.iat[date_now, 2],
+                                                       "PRED": bond}, v_step)
+                    i_step += 1
                     v_step += 1
                 print(f"TEST:  epoch/step: {epoch}/{step},  avg loss: {avg_test / X_test.shape[0]}")
         torch.cuda.empty_cache()
@@ -106,4 +124,3 @@ experiments = torch.FloatTensor(np.asarray(stocks_1day_change.iloc[-time_step:, 
 predicted = MODEL(experiments.to(device))
 print(predicted)
 ##
-
