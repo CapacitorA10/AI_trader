@@ -1,15 +1,16 @@
 ##
-import ai_trader.DataTools as DTs
-from ai_trader.model import GRU
+import DataTools as DTs
+from model import GRU
 import torch.nn.init
 from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
+import pandas as pd
 
 writer = SummaryWriter()
-device = 'cuda'
+device = 'cpu'
 torch.cuda.is_available()
 
 time_step = 20
@@ -19,15 +20,14 @@ time_term = 5  # time step 막날로부터 xx일 후 예측
     exit()"""
 bSize = 2  # 배치 사이즈
 learning_rate = 0.0001
-num_epochs = 50
+num_epochs = 100
 
-stocks = DTs.data_import('2000-09-01', '2025-01-01')  # item변수 전달 안하면, 기본 3개 나스닥 채권 금만 return
+#stocks = DTs.data_import('2000-09-01', '2025-01-01')  # item변수 전달 안하면, 기본 3개 나스닥 채권 금만 return
+stocks = pd.read_csv('data.csv',header=[0,1],index_col=0)
 stocks_1day_change = DTs.pct_change_except_bond(stocks)
 stocks_days_change = DTs.pct_change_except_bond(stocks, time_term)
-# 후가공?
-# mm = MinMaxScaler()
-# ss = StandardScaler()
-
+# 후가공-표준화
+stocks_1day_change = (stocks_1day_change-stocks_1day_change.mean())/stocks_1day_change.std()
 ## data split / XY merge
 split_date = '2020-12-30'
 X_train = DTs.append_time_step(stocks_1day_change.loc['2000-01-01': split_date],
@@ -52,7 +52,7 @@ test_real_start = torch.FloatTensor(stocks.iloc[test_start_idx - time_term,0:3])
 
 
 input_size = X_train.shape[-1]
-gru_out_size = 6  # (==hidden size)
+gru_out_size = 8  # (==hidden size)
 num_layers = 1
 num_classes = X_train.shape[-1] // 2  # 출력은 나스닥 채권 금 close.. (+달러인덱스도?
 
@@ -60,8 +60,8 @@ MODEL = GRU(num_classes, input_size, gru_out_size, num_layers, time_step).to(dev
 criterion = torch.nn.MSELoss()
 optimizer = torch.optim.RMSprop(MODEL.parameters(), lr=learning_rate)
 
-writer.add_graph(MODEL, X_train)
-writer.add_graph(MODEL, X_test)
+#writer.add_graph(MODEL, X_train)
+#writer.add_graph(MODEL, X_test)
 
 ##
 step = 0
@@ -87,9 +87,8 @@ for epoch in range(num_epochs):
         if step % 2000 == 0:
             avg_test = 0
             # 변화량 ->실제값 그래프 그리기 위해 값 추출
-            gold = test_real_start[0]
-            nasdaq = test_real_start[1]
-            bond = test_real_start[2]
+            gold = test_real_start.clone()[0]
+            nasdaq = test_real_start.clone()[1]
             i_step = 0
             with torch.no_grad():
                 MODEL.eval()
@@ -106,14 +105,13 @@ for epoch in range(num_epochs):
                     writer.add_scalar("PREDICTED/TRES", out.squeeze()[2], v_step)
                     gold *= (100 + out.squeeze()[0]) * 0.01
                     nasdaq *= (100 + out.squeeze()[1]) * 0.01
-                    bond *= (100 + out.squeeze()[2]) * 0.01
                     date_now = test_start_idx + time_term + time_step + i_step
                     writer.add_scalars("static-GOLD",{"REAL": stocks.iat[date_now, 0],
                                                       "PRED": gold} , v_step)
                     writer.add_scalars("static-NSDQ", {"REAL": stocks.iat[date_now, 1],
                                                        "PRED": nasdaq}, v_step)
                     writer.add_scalars("static-TRES", {"REAL": stocks.iat[date_now, 2],
-                                                       "PRED": bond}, v_step)
+                                                       "PRED": out.squeeze()[2]}, v_step)
                     i_step += 1
                     v_step += 1
                 print(f"TEST:  epoch/step: {epoch}/{step},  avg loss: {avg_test / X_test.shape[0]}")
@@ -124,3 +122,5 @@ experiments = torch.FloatTensor(np.asarray(stocks_1day_change.iloc[-time_step:, 
 predicted = MODEL(experiments.to(device))
 print(predicted)
 ##
+##
+
