@@ -17,7 +17,7 @@ class CNNGRU(torch.nn.Module):
             torch.nn.BatchNorm1d(cnn_feature),
             torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU(),
-            torch.nn.Conv1d(cnn_feature, cnn_feature, kernel_size=5, padding=2, bias=True),
+            torch.nn.Conv1d(cnn_feature, cnn_feature, kernel_size=3, padding=1, bias=True),
             torch.nn.BatchNorm1d(cnn_feature),
             # torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
@@ -27,7 +27,7 @@ class CNNGRU(torch.nn.Module):
             torch.nn.BatchNorm1d(cnn_feature),
             torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU(),
-            torch.nn.Conv1d(cnn_feature, cnn_feature, kernel_size=5, padding=2, bias=True),
+            torch.nn.Conv1d(cnn_feature, cnn_feature, kernel_size=3, padding=1, bias=True),
             torch.nn.BatchNorm1d(cnn_feature),
             # torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
@@ -37,7 +37,7 @@ class CNNGRU(torch.nn.Module):
             torch.nn.BatchNorm1d(cnn_feature),
             torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU(),
-            torch.nn.Conv1d(cnn_feature, cnn_feature, kernel_size=5, padding=2, bias=True),
+            torch.nn.Conv1d(cnn_feature, cnn_feature, kernel_size=3, padding=1, bias=True),
             torch.nn.BatchNorm1d(cnn_feature),
             # torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
@@ -51,24 +51,42 @@ class CNNGRU(torch.nn.Module):
             torch.nn.BatchNorm1d(comb_feature),
             torch.nn.ReLU()
         )
+
+        class extract_tensor(torch.nn.Module):
+            def forward(self, x):
+                # Output shape (batch, features, hidden)
+                tensor, _ = x
+                # Reshape shape (batch, hidden)
+                return tensor[:, -1, :]
         self.gru = torch.nn.Sequential(
             torch.nn.GRU(input_size=comb_feature, hidden_size=gru_out_size, num_layers=num_layers, batch_first=True),
+            extract_tensor(),
             torch.nn.Tanh()
         )
         self.fc = torch.nn.Sequential(
             torch.nn.Linear(gru_out_size, 32, bias=True),
+            torch.nn.BatchNorm1d(32),
             torch.nn.ReLU(),
             torch.nn.Linear(32, num_classes, bias=True)
         )
 
     def forward(self, input):
-        feat_size = input.shape[-1]
-        c1 = self.cnn1(input[:,:, 0:feat_size:feat_size>>1])
-        c2 = self.cnn2(input[:,:, 1:feat_size:feat_size>>1])
-        c3 = self.cnn3(input[:,:, 2:feat_size:feat_size>>1])
+        feat_size = input.shape[-2]
+        print(f"input: {input.shape}")
+        print(f"cnn input: {input[:, 0::feat_size>>1, :].shape}")
+        c1 = self.cnn1(input[:, 0::feat_size>>1, :])
+        c2 = self.cnn2(input[:, 1::feat_size>>1, :])
+        c3 = self.cnn3(input[:, 2::feat_size>>1, :])
+        print(f"c1: {c1.shape}, c2: {c2.shape}, c3: {c3.shape} ")
         out = torch.cat((c1, c2, c3), 1)
-        out = self.cnn_comb(out)
-        out = self.gru(out)
+        print(f"cat: {out.shape}")
+        out = self.cnn_comb(out).transpose(1,2)
+        print(f"comb: {out.shape}")
+        h_0 = (torch.zeros(self.num_layers, out.size(0), self.hidden_size)).to('cuda')
+        out = self.gru(out.transpose(1,2), h_0)
+        print(f"gru out: {out.shape}")
         out = out.view(out.size(0), -1)  # Flatten them for FC
+        print(f"gru view: {out.shape}")
         out = self.fc(out)
+        print(f"output: {out.shape}")
         return out
