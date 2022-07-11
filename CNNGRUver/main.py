@@ -1,11 +1,11 @@
 ##
 import ai_trader.DataTools as DTs
-from ai_trader.model import GRU
+from ai_trader.CnnGruModel import CNNGRU
 import torch.nn.init
 from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import pandas as pd
 
@@ -38,8 +38,8 @@ X_test = DTs.append_time_step(stocks_1day_change.loc[split_date: '2025-01-01'],
                               stocks_days_change.loc[split_date: '2025-01-01'],
                               time_step, time_term)
 
-X_train = torch.FloatTensor(np.asarray(X_train)).to(device)
-X_test = torch.FloatTensor(np.asarray(X_test)).to(device)
+X_train = torch.FloatTensor(np.asarray(X_train)).transpose(1,2).to(device)
+X_test = torch.FloatTensor(np.asarray(X_test)).transpose(1,2).to(device)
 
 train_loader = torch.utils.data.DataLoader(dataset=X_train, batch_size=bSize, shuffle=True)
 test_loader = torch.utils.data.DataLoader(dataset=X_test, batch_size=1, shuffle=False)
@@ -51,12 +51,12 @@ test_real_start = torch.FloatTensor(stocks.iloc[test_start_idx - time_term,0:3])
 ## START LEARN
 
 
-input_size = X_train.shape[-1]
+input_size = X_train.shape[-2]
 gru_out_size = 8  # (==hidden size)
 num_layers = 1
-num_classes = X_train.shape[-1] // 2  # 출력은 나스닥 채권 금 close.. (+달러인덱스도?
+num_classes = X_train.shape[-2] // 2  # 출력은 나스닥 채권 금 close.. (+달러인덱스도?
 
-MODEL = GRU(num_classes, input_size, gru_out_size, num_layers, time_step).to(device)
+MODEL = CNNGRU(num_classes, input_size, gru_out_size, num_layers, time_step).to(device)
 criterion = torch.nn.MSELoss()
 optimizer = torch.optim.RMSprop(MODEL.parameters(), lr=learning_rate)
 
@@ -74,8 +74,8 @@ for epoch in range(num_epochs):
         MODEL.train()
         optimizer.zero_grad()
 
-        out = MODEL(data[:, :-1, :])
-        loss = criterion(out, data[:, -1, 0:3])
+        out = MODEL(data[:, :, :-1])
+        loss = criterion(out, data[:,0:3,-1])
         loss.backward()
         optimizer.step()
 
