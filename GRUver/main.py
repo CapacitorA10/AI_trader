@@ -1,11 +1,12 @@
 ##
-import DataTools as DTs
-from model import GRU
+import ai_trader.DataTools as DTs
+from ai_trader.model import GRU
+import torch
 import torch.nn.init
 from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import pandas as pd
 
@@ -15,18 +16,15 @@ torch.cuda.is_available()
 
 time_step = 20
 time_term = 5  # time step 막날로부터 xx일 후 예측
-"""if time_term > time_step:
-    print("ERR: time step MUST bigger than time term")
-    exit()"""
 bSize = 2  # 배치 사이즈
 learning_rate = 0.0001
 num_epochs = 100
 
-#stocks = DTs.data_import('2000-09-01', '2025-01-01')  # item변수 전달 안하면, 기본 3개 나스닥 채권 금만 return
-stocks = pd.read_csv('data.csv',header=[0,1],index_col=0)
+stocks = DTs.data_import('2000-09-01', '2025-01-01')  # item변수 전달 안하면, 기본 3개 나스닥 채권 금만 return
+#stocks = pd.read_csv('data.csv',header=[0,1],index_col=0)
 stocks_1day_change = DTs.pct_change_except_bond(stocks)
 stocks_days_change = DTs.pct_change_except_bond(stocks, time_term)
-# 후가공-표준화
+# 후가공- 표준화
 stocks_1day_change = (stocks_1day_change-stocks_1day_change.mean())/stocks_1day_change.std()
 ## data split / XY merge
 split_date = '2020-12-30'
@@ -52,11 +50,11 @@ test_real_start = torch.FloatTensor(stocks.iloc[test_start_idx - time_term,0:3])
 
 
 input_size = X_train.shape[-1]
-gru_out_size = 8  # (==hidden size)
+hidden_size = 32  # (==hidden size)
 num_layers = 1
 num_classes = X_train.shape[-1] // 2  # 출력은 나스닥 채권 금 close.. (+달러인덱스도?
 
-MODEL = GRU(num_classes, input_size, gru_out_size, num_layers, time_step).to(device)
+MODEL = GRU(num_classes, input_size, hidden_size, num_layers, time_step).to(device)
 criterion = torch.nn.MSELoss()
 optimizer = torch.optim.RMSprop(MODEL.parameters(), lr=learning_rate)
 
@@ -70,11 +68,13 @@ v_step = 0
 for epoch in range(num_epochs):
     avg_train = 0
     for data in train_loader:
-
+        #new
+        h_0 = torch.zeros(num_layers, data.size(0), hidden_size).to('cpu')
+        #
         MODEL.train()
         optimizer.zero_grad()
 
-        out = MODEL(data[:, :-1, :])
+        out = MODEL(data[:, :-1, :], h_0)
         loss = criterion(out, data[:, -1, 0:3])
         loss.backward()
         optimizer.step()
@@ -123,4 +123,3 @@ predicted = MODEL(experiments.to(device))
 print(predicted)
 ##
 ##
-
