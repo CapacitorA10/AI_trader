@@ -16,12 +16,16 @@ class GRU(nn.Module):
         self.fc = nn.Linear(64, num_classes)
         self.relu = nn.ReLU()
         self.tanh = nn.Tanh()
+    def forward(self, x, h):
+        #h_0 = (torch.zeros(self.num_layers, x.size(0), self.hidden_size)).to('cuda')
+        #output, (hn) = self.gru(x, (h_0))
+        #hn = hn.view(-1, self.hidden_size)
+        #out = self.tanh(hn)
 
-    def forward(self, x):
-        h_0 = (torch.zeros(self.num_layers, x.size(0), self.hidden_size)).to('cuda')
-        output, (hn) = self.gru(x, (h_0))
-        hn = hn.view(-1, self.hidden_size)
-        out = self.tanh(hn)
+        #new
+        out, (h_n) = self.gru(x, h)
+        print(out.shape)
+        out = self.tanh(out.view(-1,self.hidden_size))
         out = self.fc_1(out)
         out = self.relu(out)
         out = self.fc(out)
