@@ -24,7 +24,7 @@ class GRU(nn.Module):
 
         #new
         out, (h_n) = self.gru(x, h)
-        print(out.shape)
+        out = out[:,-1,:] # LAST OUTPUT 추출
         out = self.tanh(out.view(-1,self.hidden_size))
         out = self.fc_1(out)
         out = self.relu(out)
