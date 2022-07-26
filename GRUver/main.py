@@ -93,7 +93,8 @@ for epoch in range(num_epochs):
             with torch.no_grad():
                 MODEL.eval()
                 for test_data in test_loader:
-                    out = MODEL(test_data[:, :-1, :])
+                    h_0 = torch.zeros(num_layers, test_data.size(0), hidden_size).to('cpu')
+                    out = MODEL(test_data[:, :-1, :], h_0)
                     loss = criterion(out, test_data[:, -1, 0:3])
                     avg_test += loss
                     writer.add_scalar("Loss/test", loss.sum() / bSize, v_step)
