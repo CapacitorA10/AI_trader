@@ -3,12 +3,12 @@ import torch
 ## MODEL DEFINE
 class CNNGRU(torch.nn.Module):
 
-    def __init__(self, num_classes, input_size, gru_out_size, num_layers, seq_length):
+    def __init__(self, num_classes, input_size, hidden_size, num_layers, seq_length):
         super(CNNGRU, self).__init__()
         self.num_classes = num_classes  # output Class 수
         self.num_layers = num_layers  # GRU layer 수
         self.input_size = input_size  # input feature class 수
-        self.hidden_size = gru_out_size
+        self.hidden_size = hidden_size
         self.seq_length = seq_length
         cnn_feature = 64
 
@@ -59,12 +59,12 @@ class CNNGRU(torch.nn.Module):
                 # Reshape shape (batch, hidden)
                 return tensor[:, -1, :]
         self.gru = torch.nn.Sequential(
-            torch.nn.GRU(input_size=comb_feature, hidden_size=gru_out_size, num_layers=num_layers, batch_first=True),
-            extract_tensor(),
-            torch.nn.Tanh()
+            torch.nn.GRU(input_size=comb_feature, hidden_size=hidden_size,
+                         num_layers=num_layers, batch_first=True),
+            extract_tensor()
         )
         self.fc = torch.nn.Sequential(
-            torch.nn.Linear(gru_out_size, 32, bias=True),
+            torch.nn.Linear(hidden_size, 32, bias=True),
             torch.nn.BatchNorm1d(32),
             torch.nn.ReLU(),
             torch.nn.Linear(32, num_classes, bias=True)
@@ -82,8 +82,8 @@ class CNNGRU(torch.nn.Module):
         print(f"cat: {out.shape}")
         out = self.cnn_comb(out).transpose(1,2)
         print(f"comb: {out.shape}")
-        h_0 = (torch.zeros(self.num_layers, out.size(0), self.hidden_size)).to('cuda')
-        out = self.gru(out.transpose(1,2), h_0)
+        h_0 = (torch.zeros(self.num_layers, out.size(0), self.hidden_size)).to('cpu')
+        out = self.gru(out, (h_0))
         print(f"gru out: {out.shape}")
         out = out.view(out.size(0), -1)  # Flatten them for FC
         print(f"gru view: {out.shape}")
