@@ -1,12 +1,11 @@
 ##
-import ai_trader.DataTools as DTs
-from ai_trader.CnnGruModel import CNNGRU
+import DataTools as DTs
+from CnnGruModel import CNNGRU
 import torch.nn.init
 from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import pandas as pd
 
 writer = SummaryWriter()
@@ -22,8 +21,8 @@ bSize = 2  # 배치 사이즈
 learning_rate = 0.0001
 num_epochs = 100
 
-#stocks = DTs.data_import('2000-09-01', '2025-01-01')  # item변수 전달 안하면, 기본 3개 나스닥 채권 금만 return
-stocks = pd.read_csv('data.csv',header=[0,1],index_col=0)
+stocks = DTs.data_import('2000-09-01', '2025-01-01')  # item변수 전달 안하면, 기본 3개 나스닥 채권 금만 return
+#stocks = pd.read_csv('data.csv',header=[0,1],index_col=0)
 stocks_1day_change = DTs.pct_change_except_bond(stocks)
 stocks_days_change = DTs.pct_change_except_bond(stocks, time_term)
 # 후가공-표준화
@@ -93,8 +92,8 @@ for epoch in range(num_epochs):
             with torch.no_grad():
                 MODEL.eval()
                 for test_data in test_loader:
-                    out = MODEL(test_data[:, :-1, :])
-                    loss = criterion(out, test_data[:, -1, 0:3])
+                    out = MODEL(test_data[:, :, :-1])
+                    loss = criterion(out, test_data[:,0:3,-1])
                     avg_test += loss
                     writer.add_scalar("Loss/test", loss.sum() / bSize, v_step)
                     writer.add_scalar("REAL/GOLD", test_data.squeeze()[-1, 0], v_step)
