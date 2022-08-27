@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import pandas as pd
 
+
 writer = SummaryWriter()
 device = 'cpu'
 torch.cuda.is_available()
@@ -96,20 +97,20 @@ for epoch in range(num_epochs):
                     loss = criterion(out, test_data[:,0:3,-1])
                     avg_test += loss
                     writer.add_scalar("Loss/test", loss.sum() / bSize, v_step)
-                    writer.add_scalar("REAL/GOLD", test_data.squeeze()[-1, 0], v_step)
-                    writer.add_scalar("REAL/NSDQ", test_data.squeeze()[-1, 1], v_step)
-                    writer.add_scalar("REAL/TRES", test_data.squeeze()[-1, 2], v_step)
+                    writer.add_scalar("REAL/GOLD", test_data.squeeze()[0, -1], v_step)
+                    writer.add_scalar("REAL/NSDQ", test_data.squeeze()[1, -1], v_step)
+                    writer.add_scalar("REAL/TRES", test_data.squeeze()[2, -1], v_step)
                     writer.add_scalar("PREDICTED/GOLD", out.squeeze()[0], v_step)
                     writer.add_scalar("PREDICTED/NSDQ", out.squeeze()[1], v_step)
                     writer.add_scalar("PREDICTED/TRES", out.squeeze()[2], v_step)
                     gold *= (100 + out.squeeze()[0]) * 0.01
                     nasdaq *= (100 + out.squeeze()[1]) * 0.01
                     date_now = test_start_idx + time_term + time_step + i_step
-                    writer.add_scalars("static-GOLD",{"REAL": stocks.iat[date_now, 0],
+                    writer.add_scalars("static/GOLD",{"REAL": stocks.iat[date_now, 0],
                                                       "PRED": gold} , v_step)
-                    writer.add_scalars("static-NSDQ", {"REAL": stocks.iat[date_now, 1],
+                    writer.add_scalars("static/NSDQ", {"REAL": stocks.iat[date_now, 1],
                                                        "PRED": nasdaq}, v_step)
-                    writer.add_scalars("static-TRES", {"REAL": stocks.iat[date_now, 2],
+                    writer.add_scalars("static/TRES", {"REAL": stocks.iat[date_now, 2],
                                                        "PRED": out.squeeze()[2]}, v_step)
                     i_step += 1
                     v_step += 1
@@ -121,4 +122,6 @@ experiments = torch.FloatTensor(np.asarray(stocks_1day_change.iloc[-time_step:, 
 predicted = MODEL(experiments.to(device))
 print(predicted)
 ##
+##
+
 ##
