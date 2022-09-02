@@ -32,6 +32,7 @@ class CNNGRU(torch.nn.Module):
             # torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
         )
+        '''
         self.cnn3 = torch.nn.Sequential(
             torch.nn.Conv1d(2, cnn_feature, kernel_size=5, padding=2, bias=True),
             torch.nn.BatchNorm1d(cnn_feature),
@@ -42,6 +43,7 @@ class CNNGRU(torch.nn.Module):
             # torch.nn.MaxPool1d(2, stride=2),
             torch.nn.ReLU()
         )
+        '''
         comb_feature = cnn_feature * (input_size // 2)
         self.cnn_comb = torch.nn.Sequential(
             torch.nn.Conv1d(comb_feature, comb_feature, kernel_size=5, padding=2, bias=True),
@@ -75,8 +77,9 @@ class CNNGRU(torch.nn.Module):
         feat_size = input.shape[-2]
         c1 = self.cnn1(input[:, 0::feat_size>>1, :])
         c2 = self.cnn2(input[:, 1::feat_size>>1, :])
-        c3 = self.cnn3(input[:, 2::feat_size>>1, :])
-        out = torch.cat((c1, c2, c3), 1)
+        #c3 = self.cnn3(input[:, 2::feat_size>>1, :])
+        #out = torch.cat((c1, c2, c3), 1)
+        out = torch.cat((c1, c2), 1)
         out = self.cnn_comb(out).transpose(1,2)
         h_0 = (torch.zeros(self.num_layers, out.size(0), self.hidden_size)).to('cpu')
         out, _ = self.gru(out, (h_0))
