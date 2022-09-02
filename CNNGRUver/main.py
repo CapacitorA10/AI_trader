@@ -1,11 +1,12 @@
 ##
-import DataTools as DTs
-from CnnGruModel import CNNGRU
+import ai_trader.DataTools as DTs
+from ai_trader.CnnGruModel import CNNGRU
 import torch.nn.init
 from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import pandas as pd
 
 
@@ -22,7 +23,7 @@ bSize = 2  # 배치 사이즈
 learning_rate = 0.0001
 num_epochs = 100
 
-stocks = DTs.data_import('2000-09-01', '2025-01-01')  # item변수 전달 안하면, 기본 3개 나스닥 채권 금만 return
+stocks = DTs.data_import('2000-09-01', '2025-01-01',item=['^IXIC','GC=F'])  # item변수 전달 안하면, 기본 3개 나스닥 채권 금만 return
 #stocks = pd.read_csv('data.csv',header=[0,1],index_col=0)
 stocks_1day_change = DTs.pct_change_except_bond(stocks)
 stocks_days_change = DTs.pct_change_except_bond(stocks, time_term)
@@ -66,7 +67,7 @@ optimizer = torch.optim.RMSprop(MODEL.parameters(), lr=learning_rate)
 ##
 step = 0
 v_step = 0
-
+feature_size = X_train.shape[1]
 for epoch in range(num_epochs):
     avg_train = 0
     for data in train_loader:
@@ -75,7 +76,7 @@ for epoch in range(num_epochs):
         optimizer.zero_grad()
 
         out = MODEL(data[:, :, :-1])
-        loss = criterion(out, data[:,0:3,-1])
+        loss = criterion(out, data[:, 0:feature_size//2, -1])
         loss.backward()
         optimizer.step()
 
@@ -94,15 +95,15 @@ for epoch in range(num_epochs):
                 MODEL.eval()
                 for test_data in test_loader:
                     out = MODEL(test_data[:, :, :-1])
-                    loss = criterion(out, test_data[:,0:3,-1])
+                    loss = criterion(out, test_data[:, 0:feature_size//2, -1])
                     avg_test += loss
                     writer.add_scalar("Loss/test", loss.sum() / bSize, v_step)
                     writer.add_scalar("REAL/GOLD", test_data.squeeze()[0, -1], v_step)
                     writer.add_scalar("REAL/NSDQ", test_data.squeeze()[1, -1], v_step)
-                    writer.add_scalar("REAL/TRES", test_data.squeeze()[2, -1], v_step)
+                    #writer.add_scalar("REAL/TRES", test_data.squeeze()[2, -1], v_step)
                     writer.add_scalar("PREDICTED/GOLD", out.squeeze()[0], v_step)
                     writer.add_scalar("PREDICTED/NSDQ", out.squeeze()[1], v_step)
-                    writer.add_scalar("PREDICTED/TRES", out.squeeze()[2], v_step)
+                    #writer.add_scalar("PREDICTED/TRES", out.squeeze()[2], v_step)
                     gold *= (100 + out.squeeze()[0]) * 0.01
                     nasdaq *= (100 + out.squeeze()[1]) * 0.01
                     date_now = test_start_idx + time_term + time_step + i_step
@@ -110,8 +111,8 @@ for epoch in range(num_epochs):
                                                       "PRED": gold} , v_step)
                     writer.add_scalars("static/NSDQ", {"REAL": stocks.iat[date_now, 1],
                                                        "PRED": nasdaq}, v_step)
-                    writer.add_scalars("static/TRES", {"REAL": stocks.iat[date_now, 2],
-                                                       "PRED": out.squeeze()[2]}, v_step)
+                    #writer.add_scalars("static/TRES", {"REAL": stocks.iat[date_now, 2],
+                    #                                   "PRED": out.squeeze()[2]}, v_step)
                     i_step += 1
                     v_step += 1
                 print(f"TEST:  epoch/step: {epoch}/{step},  avg loss: {avg_test / X_test.shape[0]}")
