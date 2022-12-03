@@ -14,3 +14,5 @@ thank you
 
 
 https://www.analyticsvidhya.com/blog/2021/02/using-multiple-features-in-time-series-prediction-with-cnn-gru/
+
+https://downloads.hindawi.com/journals/mpe/2020/1428104.pdf
