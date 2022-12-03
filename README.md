@@ -11,3 +11,6 @@ cnn ver use S&P500 / USA Bond 10y / GOLD
 GRU ver 'will' use NASDAQ / USA Bond 10y / GOLD / KOSPI(expected)
 
 thank you
+
+
+https://www.analyticsvidhya.com/blog/2021/02/using-multiple-features-in-time-series-prediction-with-cnn-gru/
