@@ -8,18 +8,19 @@ class CNN(nn.Module):
         self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=num_filters, kernel_size=kernel_size)
 
     def forward(self, x):
-        x = self.conv1(x)
-        return x
+        x = self.conv1(x)   # Conv1d : (N, C, L)
+        return x # X: (N, C, L)
 
 # Define the GRU
 class GRU(nn.Module):
     def __init__(self, input_size, hidden_size):
         super(GRU, self).__init__()
-        self.gru1 = nn.GRU(input_size=input_size, hidden_size=hidden_size)
+        self.gru1 = nn.GRU(input_size=input_size, hidden_size=hidden_size, batch_first=True)
 
     def forward(self, x):
+        x = x.transpose(1,2)  # gru : (N, L, H)
         x, hidden = self.gru1(x)
-        return x, hidden
+        return x, hidden # X: (N, L, H)
 
 # Define the overall model
 class Model(nn.Module):
@@ -43,10 +44,11 @@ model = Model(input_size=input_size, num_filters=num_filters, kernel_size=kernel
 # Generate some dummy input data
 seq_length = 10
 batch_size = 2
-x = torch.randn(seq_length, batch_size, input_size)
+x = torch.randn(batch_size, input_size, seq_length)
 
 # Forward pass the input through the model
 output, hidden = model(x)
+
 
 
 
