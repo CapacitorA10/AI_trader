@@ -70,7 +70,7 @@ hidden_size = 8
 model = Model(input_size=input_size, num_filters=num_filters, kernel_size=kernel_size, hidden_size=hidden_size)
 
 # Define the loss function and optimizer
-criterion = nn.CrossEntropyLoss()
+criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters())
 
 # Train the model
