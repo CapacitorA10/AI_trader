@@ -18,7 +18,8 @@ class GRU(nn.Module):
         self.gru1 = nn.GRU(input_size=input_size, hidden_size=hidden_size, batch_first=True)
 
     def forward(self, x):
-        x = x.transpose(1,2)  # gru : (N, L, H)
+        # x : (N, C, L) -> (N, L, C)
+        x = x.permute(0,2,1)
         x, hidden = self.gru1(x)
         return x, hidden # X: (N, L, H)
 
@@ -29,6 +30,7 @@ class Model(nn.Module):
         self.cnn = CNN(input_size=input_size, num_filters=num_filters, kernel_size=kernel_size)
         self.gru = GRU(input_size=num_filters, hidden_size=hidden_size)
         self.fc = nn.Linear(18*hidden_size, output_size)
+        self.output_size = output_size
 
     def forward(self, x):
         x = self.cnn(x)
