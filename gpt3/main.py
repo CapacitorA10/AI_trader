@@ -1,137 +1,120 @@
-import FinanceDataReader as fdr
+##
+from AI_ver2.cnngru_GPT3_model import Model
+import AI_ver2.DataTools as DTs
+import torch.nn.init
+from torch.utils.data import DataLoader
 import numpy as np
-import pandas as pd
-import torch
-import torch.utils.data as data
+from torch.utils.tensorboard import SummaryWriter
 
-# tk10 = fdr.DataReader('KR10YT=RR')
-hsi = fdr.DataReader('HSI')
-kospi = fdr.DataReader('KS11')
-krw_usd = fdr.DataReader('FRED:DEXKOUS')
-t10y_2y = fdr.DataReader('FRED:T10Y2Y')
-t10 = fdr.DataReader('FRED:DGS10')
+writer = SummaryWriter()
+device = 'cpu'
+torch.cuda.is_available()
 
-training_span = 3
-cum_volatility = 5
-## plot
-''' # data 받은 후 plot해보기
-hsi.plot(y='Open', color='red', label='HSI', title='Stock Indices')
-kospi.plot(y='Open', color='blue', label='KOSPI', title='Stock Indices')
-plt.legend()
-krw_usd.plot(y='DEXKOUS', color='green', label='KRW/USD', title='Exchange Rates')
-t10y_2y.plot(y='T10Y2Y', color='purple', label='10-Year Treasury to 2-Year Treasury', title='Yield Curves')
-t10.plot(y='DGS10', color='orange', label='10 year Treasury', title='10Y Yield')
-plt.show()
-'''
+time_step = 20
+time_term = 5  # time step 막날로부터 xx일 후 예측
+"""if time_term > time_step:
+    print("ERR: time step MUST bigger than time term")
+    exit()"""
+bSize = 3  # 배치 사이즈
+learning_rate = 0.0001
+num_epochs = 10
 
-## data 정규화
-start_date = '1996-12-13'
+stocks = DTs.data_import('2000-09-01', '2025-01-01',item=['^IXIC'])  # item변수 전달 안하면, 기본 3개 나스닥 채권 금만 return
+#stocks = pd.read_csv('data.csv',header=[0,1],index_col=0)
+stocks_1day_change = DTs.pct_change_except_bond(stocks)
+stocks_days_change = DTs.pct_change_except_bond(stocks, time_term)
+# 후가공-표준화
+stocks_1day_change = (stocks_1day_change-stocks_1day_change.mean())/stocks_1day_change.std()
+## data split / XY merge
+split_date = '2020-12-30'
+X_train = DTs.append_time_step(stocks_1day_change.loc['2000-01-01': split_date],
+                               stocks_days_change.loc['2000-01-01': split_date],
+                               time_step, time_term)
 
+X_test = DTs.append_time_step(stocks_1day_change.loc[split_date: '2025-01-01'],
+                              stocks_days_change.loc[split_date: '2025-01-01'],
+                              time_step, time_term)
 
-def normalize(df):
-    df = (df - df.min()) / (df.max() - df.min())
-    return df
+X_train = torch.FloatTensor(np.asarray(X_train)).transpose(1,2).to(device)
+X_test = torch.FloatTensor(np.asarray(X_test)).transpose(1,2).to(device)
 
+train_loader = torch.utils.data.DataLoader(dataset=X_train, batch_size=bSize, shuffle=True)
+test_loader = torch.utils.data.DataLoader(dataset=X_test, batch_size=1, shuffle=False)
+# print(f"Shape:\n Xtrain:{X_train.shape} Ytrain:{Y_train.shape}\n Xtest:{X_test.shape} Ytest:{Y_test.shape}")
+# test가 시작하는 때의 value(그래프 그리기용)
+test_start_idx = stocks.index.get_loc(split_date)
+test_real_start = torch.FloatTensor(stocks.iloc[test_start_idx - time_term,0:3]).to(device)
 
-def stock_diff(df, period=cum_volatility, day='1996-12-13'):
-    df = df.dropna()
-    stock_diff = df.pct_change(period)
-    # Normalize
-    volume_norm = normalize(df['Volume'])
-    stock_diff['Volume'] = volume_norm
-    stock_diff = stock_diff[stock_diff.index >= day]
-    return stock_diff.iloc[period:]
+## START LEARN
+feat_size = X_train.shape[-2]  # 출력은 나스닥 채권 금 close.. (+달러인덱스도?
 
+#             input_size, num_filters, kernel_size, hidden_size, output_size)
+MODEL = Model(input_size=feat_size, num_filters=12, kernel_size=3, hidden_size=24, output_size=feat_size).to(device)
+criterion = torch.nn.MSELoss()
+optimizer = torch.optim.AdamW(MODEL.parameters(), lr=learning_rate)
 
-hsi_1 = stock_diff(hsi, 1, start_date)
-kospi_1 = stock_diff(kospi, 1, start_date)
-hsi_5 = stock_diff(hsi, 5, start_date)
-kospi_5 = stock_diff(kospi, 5, start_date)
-t10_ = normalize(t10)[t10.index >= start_date]
-krw_usd_ = (krw_usd / krw_usd.max())[krw_usd.index >= start_date]
-t10y_2y_ = (t10y_2y / t10y_2y.max())[t10y_2y.index >= start_date]
-## plot
-''' 데이터 후가공 후 plot해보기
-ax = hsi_1.plot(y='Open', color='red', label='HSI', alpha=0.5)
-hsi_1.plot(y='Volume', color='pink', label='HSI volume', alpha=0.5, ax=ax)
-kospi_1.plot(y='Open', color='blue', label='KOSPI', alpha=0.5, ax=ax)
-kospi_1.plot(y='Volume', color='skyblue', label='KOSPI volume', alpha=0.5, ax=ax)
-plt.title('Stock Indices')
-plt.legend()
-plt.show()
-
-ax1 = krw_usd_.plot(y=krw_usd_.columns[0], color='red', label='KRW/USD', alpha=0.5)
-t10_.plot(y=t10_.columns[0], color='blue', label='T10', alpha=0.5, ax=ax1)
-t10y_2y_.plot(y=t10y_2y_.columns[0], color='green', label='T10Y-2Y', alpha=0.5, ax=ax1)
-plt.axhline(y=0, color='black', linestyle='-')
-plt.title('Economic Indicators')
-plt.legend()
-plt.show()
+#writer.add_graph(MODEL, X_train)
+#writer.add_graph(MODEL, X_test)
 
 ##
+step = 0
+v_step = 0
+feature_size = X_train.shape[1]
+for epoch in range(num_epochs):
+    avg_train = 0
+    for data in train_loader:
 
-ax1 = plt.hist([kospi_5.Open],range=[-0.1, 0.1], bins=1000,alpha=0.5)
-ax2 = plt.hist([hsi_5.Open],range=[-0.1, 0.1], bins=1000,alpha=0.5)
-plt.grid()
-plt.show()
-'''
+        MODEL.train()
+        optimizer.zero_grad()
 
+        out = MODEL(data[:, :, :-1])
+        loss = criterion(out, data[:, :, -1])
+        loss.backward()
+        optimizer.step()
 
+        writer.add_scalar("Loss/train", loss.sum() / bSize, step)
+        step += 1
+        avg_train += loss
+
+        # verification
+        if step % 2000 == 0:
+            avg_test = 0
+            # 변화량 ->실제값 그래프 그리기 위해 값 추출
+            gold = test_real_start.clone()[0]
+            nasdaq = test_real_start.clone()[1]
+            i_step = 0
+            with torch.no_grad():
+                MODEL.eval()
+                for test_data in test_loader:
+                    out = MODEL(test_data[:, :, :-1])
+                    loss = criterion(out, test_data[:, :, -1])
+                    avg_test += loss
+                    writer.add_scalar("Loss/test", loss.sum() / bSize, v_step)
+                    #writer.add_scalar("REAL/GOLD", test_data.squeeze()[0, -1], v_step)
+                    #writer.add_scalar("REAL/NSDQ", test_data.squeeze()[1, -1], v_step)
+                    writer.add_scalar("REAL/TRES", test_data.squeeze()[0, -1], v_step)
+                    #writer.add_scalar("PREDICTED/GOLD", out.squeeze()[0], v_step)
+                    #writer.add_scalar("PREDICTED/NSDQ", out.squeeze()[1], v_step)
+                    writer.add_scalar("PREDICTED/TRES", out.squeeze(), v_step)
+                    #gold *= (100 + out.squeeze()[0]) * 0.01
+                    #nasdaq *= (100 + out.squeeze()[1]) * 0.01
+                    date_now = test_start_idx + time_term + time_step + i_step
+                    #writer.add_scalars("static/GOLD",{"REAL": stocks.iat[date_now, 0],
+                    #                                  "PRED": gold} , v_step)
+                    #writer.add_scalars("static/NSDQ", {"REAL": stocks.iat[date_now, 1],
+                    #                                   "PRED": nasdaq}, v_step)
+                    writer.add_scalars("static/TRES", {"REAL": stocks.iat[date_now, 0],
+                                                       "PRED": out.squeeze()}, v_step)
+                    i_step += 1
+                    v_step += 1
+                print(f"TEST:  epoch/step: {epoch}/{step},  avg loss: {avg_test / X_test.shape[0]}")
+        torch.cuda.empty_cache()
+    print(f"TRAIN: epoch: {epoch},  avg loss: {avg_train / X_train.shape[0]}\n")
+## 최종 모델로 오늘로부터 3주 보기
+experiments = torch.FloatTensor(np.asarray(stocks_1day_change.iloc[-time_step:, :])).unsqueeze(0)
+predicted = MODEL(experiments.to(device))
+print(predicted)
 ##
-def merge_dataframes(input_df_list, output_df_list, flag):
-    merged_df = pd.concat(input_df_list + output_df_list, axis=1, sort=False)
-    if flag == "ffill":
-        merged_df.fillna(method="ffill", inplace=True)
-    elif flag == "bfill":
-        merged_df.fillna(method="bfill", inplace=True)
-    elif flag == "drop":
-        merged_df.dropna(inplace=True)
-
-    output_df_cols = sum([df.shape[1] for df in output_df_list])
-    print("Length of dataframes' columns inside output_df_list:", output_df_cols)
-    return merged_df, output_df_cols
-
-
-##
-stock_all, split = merge_dataframes([kospi_1], [kospi_5], "drop")
-
-
-##
-def append_time_step(df, training_span, cum_volatility, split):
-    z = []
-    for i in range(training_span, len(df) - cum_volatility):
-        x = df.iloc[i - training_span: i, :split]  # time step에 맞게 input만들기
-        y = df.iloc[i + cum_volatility, split:]  # 추출한 마지막날+time_term영업일 추가
-        merged = pd.concat([x, y.to_frame().T], axis=0)
-        z.append(merged)
-    return z
-
-
-##
-stock_all_ = append_time_step(stock_all, training_span, cum_volatility, split)
-stock_all_tensor = torch.Tensor(np.array(stock_all_))
-train = stock_all_tensor[:-500, :, :]
-test = stock_all_tensor[-500:, :, :]
-
-
-##
-# Create a custom dataset class that wraps the tensor
-class CustomDataset(data.Dataset):
-    def __init__(self, tensor):
-        self.tensor = tensor
-
-    def __getitem__(self, index):
-        return self.tensor[index, :, :]
-
-    def __len__(self):
-        return self.tensor.size(0)
-
-
-# Create an instance of the custom dataset
-dataset = CustomDataset(train)
-# Create a DataLoader with shuffle=True, but only shuffle the first dimension
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
-
 ##
 
-d
+##
