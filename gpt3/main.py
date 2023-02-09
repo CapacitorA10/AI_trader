@@ -7,7 +7,7 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 
 writer = SummaryWriter()
-device = 'cpu'
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.cuda.is_available()
 
 time_step = 20
