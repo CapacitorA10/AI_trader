@@ -2,8 +2,12 @@ import FinanceDataReader as fdr
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
 import torch.utils.data as data
 
+training_span = 30
+cum_volatility = 5
+batch_size = 4
 # tk10 = fdr.DataReader('KR10YT=RR')
 hsi = fdr.DataReader('HSI')
 kospi = fdr.DataReader('KS11')
@@ -11,8 +15,7 @@ krw_usd = fdr.DataReader('FRED:DEXKOUS')
 t10y_2y = fdr.DataReader('FRED:T10Y2Y')
 t10 = fdr.DataReader('FRED:DGS10')
 
-training_span = 3
-cum_volatility = 5
+
 ## plot
 ''' # data 받은 후 plot해보기
 hsi.plot(y='Open', color='red', label='HSI', title='Stock Indices')
@@ -25,9 +28,6 @@ plt.show()
 '''
 
 ## data 정규화
-start_date = '1996-12-13'
-
-
 def normalize(df):
     df = (df - df.min()) / (df.max() - df.min())
     return df
@@ -42,7 +42,7 @@ def stock_diff(df, period=cum_volatility, day='1996-12-13'):
     stock_diff = stock_diff[stock_diff.index >= day]
     return stock_diff.iloc[period:]
 
-
+start_date = '1996-12-13'
 hsi_1 = stock_diff(hsi, 1, start_date)
 kospi_1 = stock_diff(kospi, 1, start_date)
 hsi_5 = stock_diff(hsi, 5, start_date)
@@ -76,7 +76,6 @@ plt.grid()
 plt.show()
 '''
 
-
 ##
 def merge_dataframes(input_df_list, output_df_list, flag):
     merged_df = pd.concat(input_df_list + output_df_list, axis=1, sort=False)
@@ -88,11 +87,9 @@ def merge_dataframes(input_df_list, output_df_list, flag):
         merged_df.dropna(inplace=True)
 
     output_df_cols = sum([df.shape[1] for df in output_df_list])
-    print("Length of dataframes' columns inside output_df_list:", output_df_cols)
+    #print("Length of dataframes' columns inside output_df_list:", output_df_cols)
     return merged_df, output_df_cols
 
-
-##
 stock_all, split = merge_dataframes([kospi_1], [kospi_5], "drop")
 
 
@@ -105,9 +102,6 @@ def append_time_step(df, training_span, cum_volatility, split):
         merged = pd.concat([x, y.to_frame().T], axis=0)
         z.append(merged)
     return z
-
-
-##
 stock_all_ = append_time_step(stock_all, training_span, cum_volatility, split)
 stock_all_tensor = torch.Tensor(np.array(stock_all_))
 train = stock_all_tensor[:-500, :, :]
@@ -128,10 +122,77 @@ class CustomDataset(data.Dataset):
 
 
 # Create an instance of the custom dataset
-dataset = CustomDataset(train)
+train_ = CustomDataset(train)
+test_ = CustomDataset(test)
 # Create a DataLoader with shuffle=True, but only shuffle the first dimension
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
+train_dataloader = torch.utils.data.DataLoader(train_, batch_size=batch_size, shuffle=True, drop_last=True)
+test_dataloader =  torch.utils.data.DataLoader(train_, batch_size=1, shuffle=False)
+
+## 신경망 수립
+
+
+class TCN(nn.Module):
+    def __init__(self, input_features, hidden_features, kernel_size, dilation_rates, num_layers, dropout=0.2):
+        super(TCN, self).__init__()
+        self.dilation_rates = dilation_rates
+        self.num_layers = num_layers
+        self.convs = nn.ModuleList()
+        self.dropout = nn.Dropout(dropout)
+        self.convs.append(nn.Conv1d(input_features, hidden_features, kernel_size, dilation=dilation_rates[0]))
+        for i in range(1, self.num_layers):
+            self.convs.append(nn.Conv1d(hidden_features, hidden_features, kernel_size, dilation=dilation_rates[i]))
+        self.fc = nn.Linear(hidden_features, 1)
+
+    def forward(self, x):
+        x = x.permute(0, 2, 1)
+        for i, conv in enumerate(self.convs):
+            x = self.dropout(torch.relu(conv(x)))
+            #print(x.shape)
+        x = x.permute(0, 2, 1)
+        x = self.fc(x[:, -1, :])
+        return x
+
+input_features = train.shape[-1]-1
+hidden_features = input_features * 4
+kernel_size = 3
+num_layers = 3
+dilation_rates = [2**i for i in range(num_layers)]
+model = TCN(input_features, hidden_features, kernel_size, dilation_rates, num_layers)
+
+# Define the loss function and optimizer
+criterion = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.00001)
+
+# Train the model
+num_epochs = 3
+loss_ = 0
+loss_cum = []
+for epoch in range(num_epochs):
+    iter = 0
+    for inputs in train_dataloader:
+        # Forward pass
+        targets = inputs[:,-1, 3]
+        outputs = model(inputs[:, :-1, :-1])
+        loss = criterion(outputs, targets)
+
+        # Backward and optimize
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        loss_ += loss
+        # Print the loss every 100 iter
+        if (iter+1) % 10 == 0:
+            print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {loss_:.3f}')
+
+            loss_cum.append(loss_.cpu().detach())
+            loss_ = 0
+
+        iter += 1
+
+
+##
+import matplotlib.pyplot as plt
+plt.plot(loss_cum)
 
 ##
 
-d
