@@ -7,6 +7,7 @@ import torch.utils.data as data
 import dataPreprocessing as dpp
 from model import TCN
 import matplotlib.pyplot as plt
+import datetime
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 #device = 'cpu'
@@ -73,13 +74,14 @@ criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
 # Train the model
-num_epochs = 5
+num_epochs = 1
 loss_ = 0
 loss_cum = []
 ticket = 0
 
 # Create a figure and axis for plotting
 fig, ax = plt.subplots()
+ax.plot(kospi.loc[split_date:, 'Close'], label='KOSPI') # 쪼갠 날짜 이후의 KOSPI 그래프 그리기
 
 # learning
 for epoch in range(num_epochs):
@@ -132,20 +134,34 @@ for epoch in range(num_epochs):
         # Add legend label to the plot
         label = f'Epoch {epoch} - Loss: {loss_all:.4f}'
 
-        # Plot the data
-        ax.scatter(targets_all, outputs_all, label=label)
+        # volatility to price
+        basis_price = kospi.iloc[-test_size-cum_volatility-1:,3] # after split_date, KOSPI close price
+        # Series to Tensor
+        basis_price = torch.Tensor(np.array(basis_price))
+        # target, outputs to price
+        targets_price = np.zeros_like(targets_all)
+        outputs_price = np.zeros_like(outputs_all)
+        for i in range(test_size):
+            targets_price[i] = basis_price[i] * (1 + targets_all[i])
+            outputs_price[i] = basis_price[i] * (1 + outputs_all[i])
+        # numpy to dataframe & add date
+        targets_price = pd.DataFrame(targets_price, index=kospi.loc[split_date:, 'Close'].index)
+        outputs_price = pd.DataFrame(outputs_price, index=kospi.loc[split_date:, 'Close'].index)
 
-        # Set plot properties
-        ax.set_xlabel('Test Targets')
-        ax.set_ylabel('Test Outputs')
-        ax.legend()
-        plt.show()
+
+        #plot
+        ax.plot(targets_price, label= f'targets - {label}')
+        ax.plot(outputs_price, label= f'outputs - {label}')
 
 # Set plot properties
 ax.set_xlabel('Test Targets')
 ax.set_ylabel('Test Outputs')
 ax.legend()
+ax.grid()
+# set after 2023-01
+ax.set_xlim(pd.Timestamp('2021-06-01'), pd.Timestamp('2023-02-28'))
 plt.show()
+
 ##
 
 
@@ -155,6 +171,4 @@ print(model(i[:, :-1, :-1].to(device)))
 
 ## test 날짜 따오기
 
-
-kospi.loc[split_date:,'Close']
 
