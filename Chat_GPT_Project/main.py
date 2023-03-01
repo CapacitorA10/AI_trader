@@ -13,7 +13,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 #device = 'cpu'
 
 training_span = 128
-cum_volatility = 5
+cum_volatility = 10
 batch_size = 8
 test_size = 500
 # tk10 = fdr.DataReader('KR10YT=RR')
@@ -74,14 +74,17 @@ criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
 # Train the model
-num_epochs = 1
+num_epochs = 10
 loss_ = 0
 loss_cum = []
-ticket = 0
 
 # Create a figure and axis for plotting
 fig, ax = plt.subplots()
-ax.plot(kospi.loc[split_date:, 'Close'], label='KOSPI') # 쪼갠 날짜 이후의 KOSPI 그래프 그리기
+# after split_date, KOSPI close price
+ax.plot(kospi.loc[split_date:, 'Close'], label='KOSPI', linewidth=2.5, color='#00FF7F')
+# define the colormap to use
+# yellow to blue color gradient
+cmap = plt.cm.get_cmap('YlGnBu')
 
 # learning
 for epoch in range(num_epochs):
@@ -103,7 +106,7 @@ for epoch in range(num_epochs):
 
         # Print the loss every 10 iter
         iter += 1
-        if (iter) % 10 == 0:
+        if (iter) % 100 == 0:
             print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {loss_:.3f}')
             loss_cum.append(loss_.cpu().detach())
             loss_ = 0
@@ -150,16 +153,19 @@ for epoch in range(num_epochs):
 
 
         #plot
-        ax.plot(targets_price, label= f'targets - {label}')
-        ax.plot(outputs_price, label= f'outputs - {label}')
+        # calculate the color for the plot based on the epoch value
+        color = cmap(epoch / num_epochs)  # normalize the epoch value between 0 and 1
+        if epoch==0: ax.plot(targets_price, label= f'targets - {label}', linewidth=2.5, color='#FF0000')
+        ax.plot(outputs_price, label= f'outputs - {label}', color=color)
 
 # Set plot properties
 ax.set_xlabel('Test Targets')
 ax.set_ylabel('Test Outputs')
 ax.legend()
 ax.grid()
+ax.set_facecolor('lightgrey')
 # set after 2023-01
-ax.set_xlim(pd.Timestamp('2021-06-01'), pd.Timestamp('2023-02-28'))
+ax.set_xlim(pd.Timestamp('2022-01-01'), pd.Timestamp('2023-02-28'))
 plt.show()
 
 ##
@@ -170,5 +176,4 @@ for i in test_dataloader:
 print(model(i[:, :-1, :-1].to(device)))
 
 ## test 날짜 따오기
-
-
+#target 값 정확하게 따오기 검토할 것
