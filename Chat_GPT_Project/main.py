@@ -34,7 +34,7 @@ krw_usd_ = (krw_usd / krw_usd.max())[krw_usd.index >= start_date]
 t10y_2y_ = (t10y_2y / t10y_2y.max())[t10y_2y.index >= start_date]
 
 ## data 합치고 쪼개기
-stock_all, split = dpp.merge_dataframes([kospi_1], [kospi_5], "drop")
+stock_all, split = dpp.merge_dataframes([hsi_1,krw_usd_], [kospi_5], "drop")
 stock_all_ = dpp.append_time_step(stock_all, training_span, cum_volatility, split)
 stock_all_tensor = torch.Tensor(np.array(stock_all_))
 train = stock_all_tensor[:-test_size, :, :]
@@ -74,7 +74,7 @@ criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
 # Train the model
-num_epochs = 10
+num_epochs = 5
 loss_ = 0
 loss_cum = []
 
@@ -148,8 +148,8 @@ for epoch in range(num_epochs):
             targets_price[i] = basis_price[i] * (1 + targets_all[i])
             outputs_price[i] = basis_price[i] * (1 + outputs_all[i])
         # numpy to dataframe & add date
-        targets_price = pd.DataFrame(targets_price, index=kospi.loc[split_date:, 'Close'].index)
-        outputs_price = pd.DataFrame(outputs_price, index=kospi.loc[split_date:, 'Close'].index)
+        targets_price = pd.DataFrame(targets_price, index=stock_all.loc[split_date:, 'Close'].index)
+        outputs_price = pd.DataFrame(outputs_price, index=stock_all.loc[split_date:, 'Close'].index)
 
 
         #plot
