@@ -13,7 +13,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 #device = 'cpu'
 
 training_span = 128
-cum_volatility = 10
+cum_volatility = 5
 batch_size = 8
 test_size = 500
 # tk10 = fdr.DataReader('KR10YT=RR')
@@ -36,6 +36,7 @@ t10y_2y_ = (t10y_2y / t10y_2y.max())[t10y_2y.index >= start_date]
 ## data 합치고 쪼개기
 stock_all, split = dpp.merge_dataframes([hsi_1,krw_usd_], [kospi_5], "drop")
 stock_all_ = dpp.append_time_step(stock_all, training_span, cum_volatility, split)
+stock_all_input = stock_all.iloc[:, split:]
 stock_all_tensor = torch.Tensor(np.array(stock_all_))
 train = stock_all_tensor[:-test_size, :, :]
 test = stock_all_tensor[-test_size:, :, :]
@@ -74,7 +75,7 @@ criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
 # Train the model
-num_epochs = 5
+num_epochs = 10
 loss_ = 0
 loss_cum = []
 
@@ -138,15 +139,15 @@ for epoch in range(num_epochs):
         label = f'Epoch {epoch} - Loss: {loss_all:.4f}'
 
         # volatility to price
-        basis_price = kospi.iloc[-test_size-cum_volatility-1:,3] # after split_date, KOSPI close price
+        basis_price_kospi = kospi.iloc[-test_size-cum_volatility-1:,3] # after split_date, KOSPI close price
         # Series to Tensor
-        basis_price = torch.Tensor(np.array(basis_price))
+        basis_price_kospi = torch.Tensor(np.array(basis_price_kospi))
         # target, outputs to price
         targets_price = np.zeros_like(targets_all)
         outputs_price = np.zeros_like(outputs_all)
         for i in range(test_size):
-            targets_price[i] = basis_price[i] * (1 + targets_all[i])
-            outputs_price[i] = basis_price[i] * (1 + outputs_all[i])
+            targets_price[i] = basis_price_kospi[i] * (1 + targets_all[i])
+            outputs_price[i] = basis_price_kospi[i] * (1 + outputs_all[i])
         # numpy to dataframe & add date
         targets_price = pd.DataFrame(targets_price, index=stock_all.loc[split_date:, 'Close'].index)
         outputs_price = pd.DataFrame(outputs_price, index=stock_all.loc[split_date:, 'Close'].index)
@@ -155,7 +156,7 @@ for epoch in range(num_epochs):
         #plot
         # calculate the color for the plot based on the epoch value
         color = cmap(epoch / num_epochs)  # normalize the epoch value between 0 and 1
-        if epoch==0: ax.plot(targets_price, label= f'targets - {label}', linewidth=2.5, color='#FF0000')
+        #if epoch==0: ax.plot(targets_price, label= f'targets', linewidth=2.5, color='#FF0000')
         ax.plot(outputs_price, label= f'outputs - {label}', color=color)
 
 # Set plot properties
