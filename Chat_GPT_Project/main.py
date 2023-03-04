@@ -135,11 +135,6 @@ for epoch in range(num_epochs):
         # Plot the data
         ax.scatter(targets_all, outputs_all, label=label)
 
-        # Set plot properties
-        ax.set_xlabel('Test Targets')
-        ax.set_ylabel('Test Outputs')
-        ax.legend()
-        plt.show()
 
 # Set plot properties
 ax.set_xlabel('Test Targets')
